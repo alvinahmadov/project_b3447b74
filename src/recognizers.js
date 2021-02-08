@@ -14,13 +14,6 @@ class Processor {
 	}
 }
 
-function replaceAll(str, search, replace) {
-	for (let i = 0; i < str.length; ++i){
-		if (str[i] === search)
-			str[i] = replace;
-	}
-}
-
 // noinspection JSUnresolvedVariable,JSUnresolvedFunction
 export class ProcessorType8 extends Processor {
 	/**
@@ -89,6 +82,8 @@ export class ProcessorType8 extends Processor {
 				for (let index = 0; index < data.length; ++index)
 					if (index <= letter_len && index >= 0)
 						label += this.parser.letters[data[index]]
+				
+				//TODO(Alvin): Implement CTCDecoder for nodejs
 				
 				if (this.debug) {
 					// console.log("Predictions:");
