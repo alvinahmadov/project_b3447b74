@@ -1,0 +1,27 @@
+{
+	"name": "project_b3447b74",
+	"type": "module",
+	"version": "1.0.0",
+	"description": "",
+	"main": "index.js",
+	"scripts": {
+		"preinstall": "OPENCV4NODEJS_DISABLE_AUTOBUILD=1",
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"dependencies": {
+		"@tensorflow/tfjs-converter": "^3.0.0",
+		"@tensorflow/tfjs-node": "latest",
+		"canvas": "^2.6.1",
+		"jimp": "^0.16.1",
+		"js-yaml": "^4.0.0",
+		"jsdom": "^16.4.0",
+		"node-gyp": "^7.1.2",
+		"opencv-wasm": "^4.3.0-10"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"devDependencies": {
+		"@tensorflow/tfjs": "^3.0.0"
+	}
+}
