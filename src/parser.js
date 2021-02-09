@@ -20,26 +20,44 @@ export class ConfigParser {
 		};
 	}
 	
+	/**
+	 * @returns {number}
+	 * */
 	get width() {
 		return this.params[this.typename]['width'];
 	}
 	
+	/**
+	 * @returns {number}
+	 * */
 	get height() {
 		return this.params[this.typename]['height'];
 	}
 	
+	/**
+	 * @returns {number}
+	 * */
 	get netChanels() {
 		return this.params[this.typename]['net_chanels'];
 	}
 	
+	/**
+	 * @returns {number}
+	 * */
 	get fillColor() {
 		return this.params[this.typename]['fill_color'];
 	}
 	
+	/**
+	 * @returns {string}
+	 * */
 	get letters() {
 		return this.params[this.typename]['letters'];
 	}
 	
+	/**
+	 * @returns {number}
+	 * */
 	get ctcInputLength() {
 		return this.params[this.typename]['ctc_input_length'];
 	}
