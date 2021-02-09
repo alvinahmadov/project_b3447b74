@@ -1,5 +1,6 @@
-import jsYaml  from "js-yaml";
-import {JSDOM} from "jsdom";
+import jsYaml    from "js-yaml";
+import {JSDOM}   from "jsdom";
+import * as http from "https"
 
 import * as tf from "@tensorflow/tfjs-node";
 import * as fs from "fs";
@@ -7,10 +8,6 @@ import {cv}    from "opencv-wasm";
 import canvas  from "canvas"
 
 const {loadImage, createCanvas, Canvas, Image, ImageData} = canvas;
-
-const BLOCKS = [6, 12, 24, 16];
-const AXIS = 3;
-const DEBUG = false;
 
 function cvTranslateError(err) {
 	let error_stmt = undefined;
@@ -45,11 +42,55 @@ function assert(expr, msg) {
 	}
 }
 
+function _printMap(map, lineLen) {
+	let res = '{ '
+	let idx = 0
+	const size = map.length;
+	
+	for (let pair of map) {
+		if (idx + 1 !== size)
+			res += pair[0] + ' => ' + pair[1]
+		res += (((++idx) % lineLen === 0) ? ',\n' : ', ');
+	}
+	
+	res += ' }';
+	
+	return res;
+}
+
+function _printArray(array, lineLen) {
+	let size = array.length;
+	let res = '[';
+	
+	for (let i = 0; i < size; ++i) {
+		res += array[i].toString()
+		if (i + 1 !== size)
+			res += (i % lineLen + 1 === 0) ? ',\n' : ', ';
+	}
+	res += ']'
+	
+	return res
+}
+
 function toList(x) {
 	if (Array.isArray(x)) {
 		return x;
 	}
 	return [x];
+}
+
+export function getFile(url, filename) {
+	const file = fs.createWriteStream('./models/' + filename);
+	const request = http.get(url, (response) => {
+		response.pipe(file);
+		file.on('finish', function () {
+			file.close();
+		});
+	});
+	
+	console.log("+++++", request)
+	
+	return file;
 }
 
 /**
@@ -115,143 +156,43 @@ export function squeezeShape(shape, axis = null) {
 	return {newShape, keptDims};
 }
 
-/**
- * A building block for a dense block.
- *
- * Arguments:
- * @param {Tensor} inputs input tensor.
- * @param {number} growth_rate: float, growth rate at dense layers.
- * @param {string} name block label.
- *
- * @returns {Tensor}|{TensorLike} Output tensor for the block.
- */
-function convBlock(name, inputs, growth_rate) {
-	let outputs = tf.layers.batchNormalization({axis: AXIS, epsilon: 1.001e-5, name: name + '_0_bn'})
-		.apply(inputs);
+export function printData(data, lineLen = 10, name = null) {
+	let out
 	
-	outputs = tf.layers.activation({ name: name + '_0_relu', activation: 'relu'})
-		.apply(outputs);
+	if (name !== null)
+		out = name + ': '
 	
-	outputs = tf.layers.conv2d({name: name + '_1_conv', filters: 4 * growth_rate, kernelSize: 1, useBias: false})
-		.apply(outputs);
+	if (data instanceof Map) {
+		out = _printMap(data, lineLen);
+	} else if (data instanceof Array) {
+		out = _printArray(data, lineLen)
+	}
 	
-	outputs = tf.layers.batchNormalization({name: name + '_1_bn' ,axis: AXIS, epsilon: 1.001e-5})
-		.apply(outputs);
-	
-	outputs = tf.layers.activation({ name: name + '_1_relu', activation: 'relu'})
-		.apply(outputs);
-	
-	outputs = tf.layers.conv2d(
-		{name: name + '_2_conv', filters: growth_rate, kernelSize: 3, padding: 'same', useBias: false}
-		).apply(outputs);
-	
-	inputs = tf.layers.concatenate(
-		{name: name + '_concat', axis: AXIS}
-	).apply([inputs, outputs]);
-	
-	if (DEBUG)
-		console.log("conv_block", inputs.shape)
-	
-	return inputs;
+	console.log(out)
 }
 
 /**
- * A dense block.
- *
- * Arguments:
- * @param {Tensor} inputs input tensor.
- * @param {number} blocks: the number of building blocks.
- * @param {string} name: block label.
- * @returns {Tensor} Output tensor for the block.
- */
-function denseBlock(name, inputs, blocks) {
-	for (let i = 0; i < blocks; ++i)
-		inputs = convBlock(name + '_block' + (i + 1).toString(), inputs, 32);
-	return inputs;
-}
-
-/**
- * A transition block.
- * Arguments:
- * @param {Tensor} inputs input tensor.
- * @param {number} reduction compression rate at transition layers.
- * @param {string} name block label.
- *
- * @returns {Tensor} output tensor for the block.
+ * @param {Map} dataMap
+ * @param {number[]} sample
  * */
-function transitionBlock(name, inputs, reduction) {
-	inputs = tf.layers.batchNormalization(
-		{
-			name:    name + '_bn',
-			axis:    AXIS,
-			epsilon: 1.001e-5
+export function checkData(dataMap, sample) {
+	let res = new Map()
+	sample.forEach((x) => res.set(x, false))
+	
+	for (let pair of dataMap) {
+		for (let d of sample) {
+			if (d === parseInt(pair[0]))
+				res.set(d, true);
 		}
-	).apply(inputs);
+	}
 	
-	inputs = tf.layers.activation(
-		{
-			name:       name + '_relu',
-			activation: 'relu'
-		}
-	).apply(inputs);
-	
-	inputs = tf.layers.conv2d(
-		{
-			name:       name + '_conv',
-			filters:    parseInt(inputs.shape[AXIS] * reduction),
-			kernelSize: 1,
-			useBias:    false
-		}
-	).apply(inputs);
-	
-	let outputs = tf.layers.averagePooling2d(
-		{name:     name + '_pool', poolSize: 2,
-			strides:  2
-		}
-	).apply(inputs);
-	
-	if (DEBUG)
-		console.log("transitionBlock:", outputs.shape)
-	
-	return outputs;
+	return res
 }
 
-export function densenet(input_shape) {
-	let inputs = tf.layers.input({shape: input_shape});
-	
-	let outputs = tf.layers.zeroPadding2d({padding: [[3, 3], [3, 3]]})
-		.apply(inputs);
-	
-	outputs = tf.layers.conv2d({name: 'conv1/conv', filters: 64, kernelSize: 7, strides: 2, useBias: false})
-		.apply(outputs);
-	
-	outputs = tf.layers.batchNormalization({name: 'conv1/bn', axis: AXIS, epsilon: 1.001e-5})
-		.apply(outputs);
-	
-	outputs = tf.layers.activation({name: 'conv1/relu', activation: 'relu'})
-		.apply(outputs);
-	
-	outputs = tf.layers.zeroPadding2d({padding: [[1, 1], [1, 1]]})
-		.apply(outputs);
-	
-	outputs = tf.layers.maxPooling2d({name: 'pool1', poolSize: 3, strides: 2})
-		.apply(outputs);
-	
-	outputs = denseBlock('conv2', outputs, BLOCKS[0]);
-	outputs = transitionBlock('pool2', outputs, 0.5);
-	outputs = denseBlock('conv3', outputs, BLOCKS[1]);
-	outputs = transitionBlock('pool3', outputs, 0.5);
-	outputs = denseBlock('conv4', outputs, BLOCKS[2]);
-	outputs = transitionBlock('pool4', outputs, 0.5);
-	outputs = denseBlock('conv5', outputs, BLOCKS[3]);
-	
-	outputs = tf.layers.batchNormalization({name: 'bn', axis: AXIS, epsilon: 1.001e-5})
-		.apply(outputs);
-	
-	outputs = tf.layers.activation({name: 'relu', activation: 'relu'})
-		.apply(outputs);
-	
-	return tf.model({name: 'densenet121', inputs: inputs, outputs: outputs});
+export function decode(input, sequenceLength) {
+	let set = new Set()
+	if (sequenceLength.length !== 1)
+		throw Error("Must be 1 element")
 }
 
 export function cvToTensor(image) {
@@ -269,11 +210,45 @@ export function readParams(file_path, base = 'models') {
 		return jsYaml.load(contents)
 }
 
-export function getLetters(type_name) {
-	const params = get_params('params.yaml')
-	let letters = params[type_name]['letters']
-	letters = letters.replace('$$', '$')
-	return letters
+/**
+ * Wrapper for tensorflow ones
+ * @param {Array, number} shape
+ * @returns {Tensor}
+ * */
+export function ones(shape) {
+	if (!(shape instanceof Array))
+		shape = [shape]
+	return tf.ones(shape)
+}
+
+/**
+ * Wrapper for tensorflow's scalar to tensor multiplication
+ * without need to convert typings
+ * @param {Tensor} tensor
+ * @param {number, string, Uint8Array} scalar
+ * @param {string} dtype
+ *
+ * @returns {Tensor}
+ * */
+export function mulScalar(tensor, scalar, dtype = "int32") {
+	if (scalar instanceof Number
+		|| scalar instanceof String)
+		scalar = tf.scalar(scalar);
+	
+	return tf.mul(tensor, scalar);
+}
+
+export function registerOccurences(data) {
+	let kmap = new Map()
+	
+	data.forEach((x) => {
+		if (kmap.has(x))
+			kmap.set(x, kmap.get(x) + 1);
+		else
+			kmap.set(x, 1);
+	})
+	
+	return kmap
 }
 
 export function saveModelAsJSON(path, model) {
@@ -316,12 +291,10 @@ function installDOM() {
  * @param {string} img_path Path to the image to be processed
  * @param {Object} params
  * @param {boolean} write Write the result image to filesystem
- *
- * @returns {cv.Mat}
  * */
 export async function processImage(img_path,
-                                    params,
-                                    write = true) {
+                                   params,
+                                   write = true) {
 	const width = params['width'];
 	const height = params['height'];
 	const net_chanels = params['net_chanels'];
