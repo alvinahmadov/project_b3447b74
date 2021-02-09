@@ -1,99 +1,87 @@
+import * as tf from "@tensorflow/tfjs";
 
-import * as assert from "assert";
+const EPSILON = 1e-7;
 
-
-function applyOpHelper(inputs, seqLength, mergeRepeated) {}
-
-
+// noinspection JSUnusedGlobalSymbols
 /**
- * @param {Array[]} inputs
+ * The CTCDecoder is an abstract interface to be implemented when providing a
+ * decoding method on the timestep output of a RNN trained with CTC loss.
  *
- * */
-function greedyDecoder(inputs, seqLength, mergeRepeated) {
-	let numTimeSteps = inputs.length
-	
-	for (let i = 0; i < numTimeSteps; ++i) {
-		assert(inputs[i].length === seqLength.length, "The shape of inputs does not match with the shape of the input")
-	}
-}
-
-
-
-
-
-export class CTCDecoder {
+ * The two types of decoding available are:
+ *   - greedy path, through the CTCGreedyDecoder
+ *   - beam search, through the CTCBeamSearchDecoder
+ */
+class CTCDecoder {
+	/**
+	 * @param {number} numClasses
+	 * @param {number} batchSize
+	 * @param {boolean} mergeRepeated
+	 * */
 	constructor(numClasses, batchSize, mergeRepeated) {
-		this._numClasses = numClasses;
-		this._batchSize = batchSize;
-		this._mergeRepeated = mergeRepeated;
+		this.numClasses_ = numClasses;
+		this.batchSize_ = batchSize;
+		this.mergeRepeated_ = mergeRepeated;
+		this.blankIndex_ = numClasses - 1;
 	}
 	
 	/**
-	 * Decodes the output of a softmax.
-	 *
-	 * Can use either greedy search (also known as best path)
-	 * or a constrained dictionary search.
-	 *
-	 * @param {Tensor} input `(samples, time_steps, num_categories)`
-	 * containing the prediction, or output of the softmax.
-	 * @param {Tensor} inputLength `(samples, )` containing the sequence length for
-	 * each batch item in `y_pred`.
-	 *
-	 * @param {boolean} mergeRepeated
-	 *
-	 * @returns:
-	 * if `greedy` is `true`, returns a list of one element that
-	 * contains the decoded sequence.
-	 * If `false`, returns the `top_paths` most probable
-	 * decoded sequences.
-	 *
-	 * Each decoded sequence has shape (samples, time_steps).
-	 * @important: blank labels are returned as `-1`.
-	 * Tensor `(top_paths, )` that contains
-	 * the log probability of each decoded sequence.
-	 * */
-	decode(input, inputLength, mergeRepeated = true) {}
+	 *  Dimensionality of the input/output is expected to be:
+	 *  - seq_len[b] - b = 0 to batch_size_
+	 *  - input[t].rows(b) - t = 0 to timesteps; b = 0 t batch_size_
+	 *  - output.size() specifies the number of beams to be returned.
+	 *  - scores(b, i) - b = 0 to batch_size; i = 0 to output.size()
+	 */
+	decode(input, inputLength){}
 }
 
 /**
+ * @extends CTCDecoder
  * CTCGreedyDecoder is an implementation of the simple best path decoding
  * algorithm, selecting at each timestep the most likely class at each timestep.
- */
+ * */
 export class CTCGreedyDecoder extends CTCDecoder {
-	constructor(num_classes, batch_size, merge_repeated)
-	{
-		super(num_classes, batch_size, merge_repeated);
+	/**
+	 * @param {number} numClasses
+	 * @param {number} batchSize
+	 * @param {boolean} mergeRepeated
+	 * */
+	constructor(numClasses, batchSize, mergeRepeated) {
+		super(numClasses, batchSize, mergeRepeated);
 	}
 	
+	decode2(input, inputLength) {
 	
-	decode(input, inputLength, mergeRepeated = true) {
-		// for (let b = 0; b < this._batchSize; ++b) {
-		// 	let seq_len_b = inputLength[b];
-		// 	// Only writing to beam 0
-		// 	let output_b = (*output)[0][b];
-		//
-		// 	int prev_class_ix = -1;
-		// 	(*scores)(b, 0) = 0;
-		// 	for (int t = 0; t < seq_len_b; ++t) {
-		// 		auto row = input[t].row(b);
-		// 		int max_class_ix;
-		// 		(*scores)(b, 0) += -row.maxCoeff(&max_class_ix);
-		// 		if (max_class_ix != Decoder::blank_index_ &&
-		// 			!(Decoder::merge_repeated_ && max_class_ix == prev_class_ix)) {
-		// 			output_b.push_back(max_class_ix);
-		// 		}
-		// 		prev_class_ix = max_class_ix;
-		// 	}
-		// }
+	}
+	
+	decode(input, inputLength, output, scores){
+		if (output === undefined || output[0].length < this.batchSize_)
+			throw Error("output needs to be of size at least (1, batch_size).");
+		
+		if (scores.rows < this.batchSize_ || scores.cols === 0)
+			return Error("scores needs to be of size at least (batch_size, 1).");
+		
+		input = tf.log(tf.add(tf.transpose(input, [1, 0, 2]), EPSILON));
+		inputLength = tf.cast(inputLength, 'int32');
+		
+		// For each batch entry, identify the transitions
+		for (let b = 0; b < this.batchSize_; ++b) {
+			let seqLenB = inputLength[b];
+			// Only writing to beam 0
+			let outputB = output[0][b];
+			
+			let prev_class_ix = -1;
+			scores[b][0] = 0; // (b, 0)
+			for (let t = 0; t < seqLenB; ++t) {
+				let row = input[t].row(b);
+				let max_class_ix = 0;
+				scores[b][0] += -row.maxCoeff(max_class_ix);
+				if (max_class_ix !== this.blankIndex_ &&
+					!(this.mergeRepeated_ && max_class_ix === prev_class_ix)) {
+					outputB.push_back(max_class_ix);
+				}
+				prev_class_ix = max_class_ix;
+			}
+		}
+		return true;
 	}
 }
-
-/**
- *
- * 	 * @param {boolean} greedy perform much faster best-path search if `true`.
- * This does not use a dictionary.
- * @param {number} beam_width if `greedy` is `false`: a beam search decoder will be used
- * with a beam of this width.
- * @param {number} top_paths: if `greedy` is `false`,
- * how many of the most probable paths will be returned.
- * */
