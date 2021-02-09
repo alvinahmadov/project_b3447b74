@@ -1,12 +1,20 @@
-import * as tf        from "@tensorflow/tfjs";
+import * as tf        from "@tensorflow/tfjs-node";
 import {ConfigParser} from "./parser.js";
+// import {CTCGreedyDecoder}   from "./ctc_layer.js";
+import {Lambda}       from "./lambda_layer.js";
 import {
-	densenet,
 	processImage,
 	saveModelAsJSON,
-	cvToTensor
+	cvToTensor,
+	checkData,
+	ones,
+	mulScalar,
+	registerOccurences,
+	printData,
+	decode
 }                     from "./utils.js";
 
+import {densenet} from "./densenet.js";
 
 class Processor {
 	constructor(path, type) {
@@ -31,21 +39,23 @@ export class ProcessorType8 extends Processor {
 	 * Get the pretrained model.
 	 */
 	get model() {
-		const input_shape = [this.parser.height,
+		const inputShape = [this.parser.height,
 		                     this.parser.width,
 		                     this.parser.netChanels];
 		
-		let inputs = tf.input({shape: input_shape});
+		let inputs = tf.input({shape: inputShape});
 		
-		let dense_layer = densenet(input_shape)
+		let dense_layer = densenet(inputs)
 			.apply(inputs);
 		
 		let reshaped = tf.layers.reshape({name: 'Reshape', targetShape: [24, 128]})
 			.apply(dense_layer);
 		
 		let gruLayer =
-			tf.layers.gru({name: "GRU", units: 256, activation: 'tanh',
-				              recurrentActivation: 'sigmoid', returnSequences: true, dropout: 0.2});
+			tf.layers.gru({
+				              name:                "GRU", units: 256, activation: 'tanh',
+				              recurrentActivation: 'sigmoid', returnSequences: true, dropout: 0.2
+			              });
 		
 		let blstm_1 = tf.layers.bidirectional({name: 'Bidirectional', layer: gruLayer})
 			.apply(reshaped);
@@ -58,7 +68,8 @@ export class ProcessorType8 extends Processor {
 		
 		const model = tf.model({inputs: inputs, outputs: outputs});
 		
-		if (!this.debug) {
+		if (this.debug) {
+			console.clear();
 			model.summary();
 			saveModelAsJSON('models/debug_model.json', model);
 		}
@@ -68,27 +79,37 @@ export class ProcessorType8 extends Processor {
 	
 	async predict(image_path = './models/example8.png') {
 		let model = this.model;
-		model.loadWeights(this.parser.modelPath, false)
+		model.loadWeights(this.parser.modelPath,
+		                  false);
 		processImage(image_path, this.parser.parameters)
 			.then(image => {
-				const tensor = cvToTensor(image)
+				const letters = this.parser.letters;
+				const lettersLen = letters.length;
+				const tensor = cvToTensor(image);
 				const predictions = model.predict(tensor);
+				const sample = [3, 18, 29, 7, 30, 19]
 				
-				const data = predictions.argMax(2).dataSync()
-				const letters = this.parser.letters
-				const letter_len = letters.length;
-				let label = '' // data[0];
+				let input = tf.log(tf.add(tf.transpose(predictions, [1, 0, 2]), Math.E));
+				let inputLength = mulScalar(ones(predictions.shape[0]), predictions.shape[1])
+				inputLength = tf.cast(inputLength, 'int32');
 				
-				for (let index = 0; index < data.length; ++index)
-					if (index <= letter_len && index >= 0)
-						label += this.parser.letters[data[index]]
-				
-				//TODO(Alvin): Implement CTCDecoder for nodejs
+				const data = input.argMax().dataSync()
 				
 				if (this.debug) {
-					// console.log("Predictions:");
-					// console.log(predictions);
-					console.log("label", label)
+					let dataOut = registerOccurences(data);
+					console.log("=================================================================")
+					console.log(dataOut);
+					console.log("_________________________________________________________________")
+					console.log(data[0]);
+					console.log("=================================================================")
+					console.log("Check", checkData(dataOut, sample))
+					console.log("=================================================================")
+					let text = ''
+					
+					data.forEach((x)=> {
+						text += letters.charAt(x)
+					})
+					console.log(lettersLen, text)
 				}
 			});
 	}
