@@ -9,20 +9,14 @@
 		"run": "node src/index.js"
 	},
 	"dependencies": {
-		"@tensorflow/tfjs-data": "^3.0.0",
 		"@tensorflow/tfjs-node": "^2.8.5",
 		"canvas": "^2.6.1",
 		"jimp": "^0.16.1",
 		"js-yaml": "^4.0.0",
 		"jsdom": "^16.4.0",
-		"node-gyp": "^7.1.2",
 		"opencv-wasm": "^4.3.0-10"
 	},
 	"keywords": [],
 	"author": "",
-	"license": "ISC",
-	"devDependencies": {
-		"@tensorflow/tfjs": "^3.0.0",
-		"@tensorflow/tfjs-converter": "^3.0.0"
-	}
+	"license": "ISC"
 }
