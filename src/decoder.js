@@ -1,4 +1,5 @@
-import * as tf from "@tensorflow/tfjs-node";
+import * as tf  from "@tensorflow/tfjs-node";
+import {rowMax} from "./utils.js";
 
 /**
  * The CTCDecoder is an abstract interface to be implemented when providing a
@@ -65,11 +66,6 @@ export class CTCGreedyDecoder extends CTCDecoder {
 	 *
 	 * If `mergeRepeated` is `true`, merge repeated classes in output.
 	 *
-	 * This means that if consecutive logits' maximum indices are the same,
-	 * only the first of these is emitted.  The sequence `A B B * B * B` (where '*'
-	 * is the blank label) becomes
-	 *  `A B B B` if `mergeRepeated=true`.
-	 *  `A B B B B` if `mergeRepeated=false`.
 	 * @param {Tensor} inputs: 3-D `float` `Tensor` sized `[maxTime, batchSize, numClasses]`.
 	 * The logits.
 	 * @param {Tensor} sequenceLength: 1-D `int32` vector containing sequence lengths, having
