@@ -1,18 +1,16 @@
-import * as tf        from "@tensorflow/tfjs-node";
-import {ConfigParser} from "./parser.js";
-// import {CTCGreedyDecoder}   from "./ctc_layer.js";
-import {Lambda}       from "./lambda_layer.js";
+import * as tf            from "@tensorflow/tfjs-node";
+import {ConfigParser}     from "./parser.js";
+import {CTCGreedyDecoder} from "./decoder.js";
 import {
 	processImage,
 	saveModelAsJSON,
 	cvToTensor,
-	checkData,
 	ones,
 	mulScalar,
-	registerOccurences,
-	printData,
-	decode
-}                     from "./utils.js";
+	
+	PERMUTATION,
+	EPSILON
+}                         from "./utils.js";
 
 import {densenet} from "./densenet.js";
 
@@ -30,7 +28,7 @@ export class ProcessorType8 extends Processor {
 	 * @param {string} path An identifier for this instance of TextData.
 	 * @param {boolean} debug
 	 */
-	constructor(path, debug = true) {
+	constructor(path, debug = false) {
 		super(path, 'type8');
 		this.debug = debug
 	}
@@ -40,8 +38,8 @@ export class ProcessorType8 extends Processor {
 	 */
 	get model() {
 		const inputShape = [this.parser.height,
-		                     this.parser.width,
-		                     this.parser.netChanels];
+		                    this.parser.width,
+		                    this.parser.netChanels];
 		
 		let inputs = tf.input({shape: inputShape});
 		
@@ -69,7 +67,6 @@ export class ProcessorType8 extends Processor {
 		const model = tf.model({inputs: inputs, outputs: outputs});
 		
 		if (this.debug) {
-			console.clear();
 			model.summary();
 			saveModelAsJSON('models/debug_model.json', model);
 		}
@@ -77,40 +74,26 @@ export class ProcessorType8 extends Processor {
 		return model;
 	}
 	
-	async predict(image_path = './models/example8.png') {
+	async predict(image_path) {
 		let model = this.model;
-		model.loadWeights(this.parser.modelPath,
-		                  false);
+		let result = '';
+		model.loadWeights(this.parser.modelPath, false);
 		processImage(image_path, this.parser.parameters)
 			.then(image => {
-				const letters = this.parser.letters;
-				const lettersLen = letters.length;
-				const tensor = cvToTensor(image);
-				const predictions = model.predict(tensor);
-				const sample = [3, 18, 29, 7, 30, 19]
+				const imgTensor = cvToTensor(image);
+				const predictions = model.predict(imgTensor);
+				let input = tf.log(tf.add(tf.transpose(predictions, PERMUTATION), EPSILON));
+				let sequenceLength = mulScalar(ones(predictions.shape[0]), predictions.shape[1])
 				
-				let input = tf.log(tf.add(tf.transpose(predictions, [1, 0, 2]), Math.E));
-				let inputLength = mulScalar(ones(predictions.shape[0]), predictions.shape[1])
-				inputLength = tf.cast(inputLength, 'int32');
-				
-				const data = input.argMax().dataSync()
-				
-				if (this.debug) {
-					let dataOut = registerOccurences(data);
-					console.log("=================================================================")
-					console.log(dataOut);
-					console.log("_________________________________________________________________")
-					console.log(data[0]);
-					console.log("=================================================================")
-					console.log("Check", checkData(dataOut, sample))
-					console.log("=================================================================")
-					let text = ''
-					
-					data.forEach((x)=> {
-						text += letters.charAt(x)
-					})
-					console.log(lettersLen, text)
+				try {
+					let decoder = new CTCGreedyDecoder();
+					decoder.decode(input, sequenceLength);
+				} catch (e) {
+					console.error(e);
 				}
 			});
+		
+		// const sample = [3, 18, 29, 7, 30, 19]
+		return result;
 	}
 }

@@ -10,4 +10,6 @@ async function recognize() {
 	}
 }
 
-await recognize()
+recognize().then(
+	text => console.log("Text:", text)
+)

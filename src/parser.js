@@ -14,8 +14,8 @@ export class ConfigParser {
 		return {
 			'width':        this.width,
 			'height':       this.height,
-			'net_channels': this.net_chanels,
-			'fill_color':   this.fill_color,
+			'net_channels': this.netChanels,
+			'fill_color':   this.fillColor,
 			'letters':      this.letters
 		};
 	}

@@ -9,7 +9,8 @@
 		"run": "node src/index.js"
 	},
 	"dependencies": {
-		"@tensorflow/tfjs-node": "^3.0.0",
+		"@tensorflow/tfjs-data": "^3.0.0",
+		"@tensorflow/tfjs-node": "^2.8.5",
 		"canvas": "^2.6.1",
 		"jimp": "^0.16.1",
 		"js-yaml": "^4.0.0",
