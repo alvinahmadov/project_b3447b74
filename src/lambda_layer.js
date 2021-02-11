@@ -18,7 +18,7 @@ export class Lambda extends tf.layers.Layer {
 	 * @param {Array} inputShape
 	 */
 	computeOutputShape(inputShape) {
-		return [inputShape[0], inputShape[1], inputShape[2], inputShape[3]]
+		return [inputShape[0], inputShape[2], inputShape[3]]
 	}
 	
 	
@@ -38,11 +38,6 @@ export class Lambda extends tf.layers.Layer {
 		
 		this.invokeCallHook(input, kwargs);
 		return this.func_(input, kwargs);
-	}
-	
-	apply(inputs, kwargs) {
-		this.call(inputs, kwargs)
-		return super.apply(inputs, kwargs);
 	}
 }
 
