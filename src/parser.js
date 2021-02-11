@@ -1,4 +1,7 @@
-import {readParams} from "./utils.js";
+import {
+	readParams,
+	loadModelFromJSON,
+} from "./utils.js";
 
 export class ConfigParser {
 	constructor(path = 'params.yaml', typename) {
@@ -66,7 +69,29 @@ export class ConfigParser {
 		return this.params[this.typename]['max_label_length'];
 	}
 	
+	/**
+	 * @returns {string} path
+	 * */
 	get modelPath() {
 		return this.params[this.typename]['model_path'];
+	}
+	
+	get modelJSON() {
+		if (!this.modelPath.includes('.json'))
+			throw Error("Not a json file: ", this.modelPath);
+		
+		return loadModelFromJSON(this.modelPath)
+	}
+	
+	//TODO(Alvin): Implement reading from pretrained weights file
+	loadWeights(model, strict = true) {
+		try {
+			
+			// model.loadWeights(this.modelJSON['weightsManifest'][0], strict);
+			return true;
+		} catch (e) {
+			console.error(e)
+			return null;
+		}
 	}
 }
