@@ -80,7 +80,7 @@ export class ProcessorType8 extends Processor {
 		let result = "";
 		// May occur model import incompatibility, if model is imported
 		// from different environment (Keras), so run not strict
-		model.loadWeights(this.parser.modelPath, true);
+		model.loadWeights(this.parser.modelPath, false);
 		return processImage(image_path, this.parser.parameters)
 			.then(image => {
 				const imgTensor = cvToTensor(image);
