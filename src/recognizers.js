@@ -28,7 +28,7 @@ export class ProcessorType8 extends Processor {
 	 * @param {string} path An identifier for this instance of TextData.
 	 * @param {boolean} debug
 	 */
-	constructor(path, debug = false) {
+	constructor(path, debug = true) {
 		super(path, 'type8');
 		this.debug = debug
 	}
@@ -52,7 +52,7 @@ export class ProcessorType8 extends Processor {
 		let gruLayer =
 			tf.layers.gru({
 				              name:                "GRU", units: 256, activation: 'tanh',
-				              recurrentActivation: 'sigmoid', returnSequences: true, dropout: 0.2
+				              recurrentActivation: 'sigmoid', returnSequences: true, dropout: 0.5
 			              });
 		
 		let blstm_1 = tf.layers.bidirectional({name: 'Bidirectional', layer: gruLayer})
@@ -75,25 +75,51 @@ export class ProcessorType8 extends Processor {
 	}
 	
 	async predict(image_path) {
+		console.clear()
 		let model = this.model;
-		let result = '';
-		model.loadWeights(this.parser.modelPath, false);
-		processImage(image_path, this.parser.parameters)
+		let result = "";
+		// May occur model import incompatibility, if model is imported
+		// from different environment (Keras), so run not strict
+		model.loadWeights(this.parser.modelPath, true);
+		return processImage(image_path, this.parser.parameters)
 			.then(image => {
 				const imgTensor = cvToTensor(image);
 				const predictions = model.predict(imgTensor);
+				
 				let input = tf.log(tf.add(tf.transpose(predictions, PERMUTATION), EPSILON));
-				let sequenceLength = mulScalar(ones(predictions.shape[0]), predictions.shape[1])
+				let sequenceLength = mulScalar(ones(predictions.shape[0]), predictions.shape[1]);
+				sequenceLength = tf.cast(sequenceLength, "int32");
+				
+				if (this.debug)
+				{
+					console.log("Predictions: ")
+					predictions.print(true);
+					console.log("Processed predictions:")
+					input.print(true);
+				}
 				
 				try {
-					let decoder = new CTCGreedyDecoder();
+					let decoder = new CTCGreedyDecoder(true,
+					                                   this.debug);
 					decoder.decode(input, sequenceLength);
+					const indice = decoder.indices[0];
+					const value = decoder.values[0];
+					const shape = decoder.shape[0];
+					
+					for(const v of value.dataSync()) {
+						if (v > 0) {
+							result += this.parser.letters[v];
+						}
+					}
+					indice.dispose();
+					value.dispose();
+					shape.dispose();
+					return result;
 				} catch (e) {
 					console.error(e);
 				}
-			});
-		
+				return result;
+			}).catch(r => console.error(r));
 		// const sample = [3, 18, 29, 7, 30, 19]
-		return result;
 	}
 }
