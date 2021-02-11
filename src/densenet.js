@@ -1,13 +1,7 @@
 import * as tf from "@tensorflow/tfjs-node";
 
-const BASE_WEIGTHS_PATH = 'https://storage.googleapis.com/tensorflow/keras-applications/densenet/'
 const BLOCKS = [6, 12, 24, 16];
 const AXIS = 3;
-const DENSENET121_WEIGHT_NAME = 'densenet121_weights_tf_dim_ordering_tf_kernels.h5'
-const DENSENET121_WEIGHT_NOTOP_NAME = 'densenet121_weights_tf_dim_ordering_tf_kernels_notop'
-const WEIGHT_EXT = '.h5'
-const DENSENET121_WEIGHT_PATH = BASE_WEIGTHS_PATH + DENSENET121_WEIGHT_NAME + WEIGHT_EXT;
-const DENSENET121_WEIGHT_PATH_NOTOP = BASE_WEIGTHS_PATH + DENSENET121_WEIGHT_NOTOP_NAME + WEIGHT_EXT;
 
 class Densenet extends tf.LayersModel {
 	static className = 'Functional';
@@ -161,7 +155,8 @@ function densenetPrepare(inputs, debug = false) {
 	return outputs
 }
 
-export function densenet(inputs, debug = false) {
+export function densenet(shape, debug = false) {
+	const inputs = tf.input({shape: shape})
 	const outputs = densenetPrepare(inputs, debug)
 	
 	return new Densenet({name: 'densenet121', inputs: inputs, outputs: outputs});
