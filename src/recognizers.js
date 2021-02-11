@@ -13,6 +13,7 @@ import {
 }                         from "./utils.js";
 
 import {densenet} from "./densenet.js";
+import {Lambda}   from "./lambda_layer.js";
 
 class Processor {
 	constructor(path, type) {
@@ -41,13 +42,16 @@ export class ProcessorType8 extends Processor {
 		                    this.parser.width,
 		                    this.parser.netChanels];
 		
-		let inputs = tf.input({shape: inputShape});
+		let inputs = tf.input({name: "input_1", shape: inputShape});
 		
-		let dense_layer = densenet(inputs)
-			.apply(inputs);
+		let dense_layer = densenet(inputShape).apply(inputs);
 		
-		let reshaped = tf.layers.reshape({name: 'Reshape', targetShape: [24, 128]})
-			.apply(dense_layer);
+		let squeezed = new Lambda((x) => {
+			return tf.squeeze(x, 1);
+		}).apply(dense_layer);
+		
+		let reshaped = tf.layers.reshape({name: 'reshape', targetShape: [24, 128]})
+			.apply(squeezed);
 		
 		let gruLayer =
 			tf.layers.gru({
@@ -55,13 +59,13 @@ export class ProcessorType8 extends Processor {
 				              recurrentActivation: 'sigmoid', returnSequences: true, dropout: 0.5
 			              });
 		
-		let blstm_1 = tf.layers.bidirectional({name: 'Bidirectional', layer: gruLayer})
+		let blstm_1 = tf.layers.bidirectional({name: 'bidirectional', layer: gruLayer})
 			.apply(reshaped);
-		let blstm_2 = tf.layers.bidirectional({name: 'Bidirectional_1', layer: gruLayer})
+		let blstm_2 = tf.layers.bidirectional({name: 'bidirectional_1', layer: gruLayer})
 			.apply(blstm_1);
 		
 		let outputs = tf.layers.dense(
-			{name: "Dense_2", units: this.parser.letters.length + 1, activation: "softmax"}
+			{name: "dense", units: this.parser.letters.length + 1, activation: "softmax"}
 		).apply(blstm_2);
 		
 		const model = tf.model({inputs: inputs, outputs: outputs});
@@ -78,9 +82,8 @@ export class ProcessorType8 extends Processor {
 		console.clear()
 		let model = this.model;
 		let result = "";
-		// May occur model import incompatibility, if model is imported
-		// from different environment (Keras), so run not strict
-		model.loadWeights(this.parser.modelPath, false);
+		this.parser.loadWeights(model);
+		
 		return processImage(image_path, this.parser.parameters)
 			.then(image => {
 				const imgTensor = cvToTensor(image);
@@ -90,8 +93,7 @@ export class ProcessorType8 extends Processor {
 				let sequenceLength = mulScalar(ones(predictions.shape[0]), predictions.shape[1]);
 				sequenceLength = tf.cast(sequenceLength, "int32");
 				
-				if (this.debug)
-				{
+				if (this.debug) {
 					console.log("Predictions: ")
 					predictions.print(true);
 					console.log("Processed predictions:")
@@ -106,7 +108,7 @@ export class ProcessorType8 extends Processor {
 					const value = decoder.values[0];
 					const shape = decoder.shape[0];
 					
-					for(const v of value.dataSync()) {
+					for (const v of value.dataSync()) {
 						if (v > 0) {
 							result += this.parser.letters[v];
 						}
