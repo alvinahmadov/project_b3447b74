@@ -1,10 +1,11 @@
-import jsYaml    from "js-yaml";
-import {JSDOM}   from "jsdom";
+import jsYaml  from "js-yaml";
+import {JSDOM} from "jsdom";
 
-import * as tf from "@tensorflow/tfjs-node";
-import * as fs from "fs";
-import {cv}    from "opencv-wasm";
-import canvas  from "canvas"
+import * as tf  from "@tensorflow/tfjs-node";
+import * as fs  from "fs";
+import {cv}     from "opencv-wasm";
+import canvas   from "canvas"
+import jsonfile from "jsonfile";
 
 const PERMUTATION = [1, 0, 2];
 const EPSILON = 1e-7;
@@ -132,7 +133,19 @@ export function mulScalar(tensor, scalar, dtype = "int32") {
 }
 
 export function saveModelAsJSON(path, model) {
-	fs.writeFileSync(path, JSON.stringify(model))
+	jsonfile.writeFile(
+		path, model.toJSON(), () => console.log("Model save finished.")
+	)
+}
+
+export function loadModelFromJSON(path) {
+	let object = null;
+	try {
+		object = jsonfile.readFileSync(path, {encoding: 'utf-8', flag: 'r'})
+	} catch (e) {
+		console.error(e);
+	}
+	return object;
 }
 
 /// opencv specific utilities
@@ -142,6 +155,7 @@ export async function cvRead(img_path) {
 	let image = await loadImage(img_path);
 	return cv.imread(image);
 }
+
 // opencv specific
 export async function cvWrite(img, file_path) {
 	try {
@@ -149,7 +163,7 @@ export async function cvWrite(img, file_path) {
 		cv.imshow(canvas, img);
 		fs.writeFileSync(file_path, canvas.toBuffer('image/jpeg'));
 	} catch (e) {
-		console.log(cvTranslateError(e));
+		console.error(cvTranslateError(e));
 	}
 }
 
