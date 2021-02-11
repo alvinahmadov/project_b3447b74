@@ -14,12 +14,14 @@ class CTCDecoder {
 	
 	/**
 	 * @param {boolean} mergeRepeated boolean
+	 * @param {boolean} debug
 	 * */
-	constructor(mergeRepeated = true) {
+	constructor(mergeRepeated = true, debug) {
 		this.mergeRepeated_ = mergeRepeated;
-		this.indices_ = null
-		this.values_ = null
-		this.shape_ = null
+		this.indices_ = []
+		this.values_ = []
+		this.shape_ = []
+		this.debug = debug;
 	}
 	
 	/**
@@ -44,6 +46,7 @@ class CTCDecoder {
 	}
 }
 
+// noinspection JSPrimitiveTypeWrapperUsage
 /**
  * CTCGreedyDecoder is an implementation of the simple best path decoding
  * algorithm, selecting at each timestep the most likely class at each timestep.
@@ -51,9 +54,10 @@ class CTCDecoder {
 export class CTCGreedyDecoder extends CTCDecoder {
 	/**
 	 * @param {boolean} mergeRepeated. Default: True.
+	 * @param {boolean} debug.
 	 * */
-	constructor(mergeRepeated = true) {
-		super(mergeRepeated);
+	constructor(mergeRepeated = true, debug = true) {
+		super(mergeRepeated, debug);
 	}
 	
 	//public
@@ -81,14 +85,14 @@ export class CTCGreedyDecoder extends CTCDecoder {
 		if (batchSize !== sequenceLength.shape[0])
 			throw Error("sequenceLength.length != batch_size");
 		
-		let logProb = tf.buffer([batchSize, this.topPaths], "float32");
+		let logProb = tf.buffer([batchSize, CTCGreedyDecoder.topPaths], "float32");
 		let inputListTimesteps = Array();
 		let inputsData = inputs.dataSync();
 		
 		// Group pretrained data into equal-sized slices as tensor2d [batchSize, numClasses],
 		// group count is `maxTime` and each group has `numClasses` elements
 		for (let timeStep = 0, step = 0;
-		     timeStep < maxTime, step !== inputsData.length;
+		     timeStep < maxTime;
 		     ++timeStep, step = timeStep * batchSize * numClasses) {
 			let sliced = inputsData.slice(step,
 			                              (timeStep + 1) * batchSize * numClasses)
@@ -97,45 +101,66 @@ export class CTCGreedyDecoder extends CTCDecoder {
 		}
 		
 		let seqLenT = sequenceLength.arraySync();
-		let sequences = Array(batchSize);
+		let sequences = [[]];
 		
 		let decoder = (begin, end) => {
 			for (let idx = begin; idx < end; ++idx) {
-				sequences[idx] = Array();
+				let sequence = []
 				let prevIndices = -1;
 				for (let t = 0; t < seqLenT[idx]; ++t) {
 					let maxClassIndices;
-					let rowMax = rowMax(inputListTimesteps[t], idx);
-					logProb.set(-rowMax[0], idx, 0);
-					maxClassIndices = rowMax[1];
+					const rmax = rowMax(inputListTimesteps[t], idx);
+					let prob = logProb.get(idx, 0)
+					logProb.set(prob + (-rmax[0]), idx, 0);
+					maxClassIndices = rmax[1];
 					if (maxClassIndices !== blankIndex &&
 						!(this.mergeRepeated_ && maxClassIndices === prevIndices)) {
-						sequences[idx][0].push(maxClassIndices);
+						sequence.push(maxClassIndices);
 					}
 					prevIndices = maxClassIndices;
 				}
+				sequences[idx][0] = sequence;
 			}
 		}
-		// Run decoder() in threads of 50 * maxTime * numClasses
+		
+		if (this.debug) {
+			console.log("Sequences: ", sequences)
+			console.log("Log prob : ", logProb.values)
+		}
+		
+		decoder(0, batchSize);
 		this._save(sequences);
+		
+		inputs.dispose()
+		sequenceLength.dispose()
 	}
 	
 	//private
 	_save(sequences) {
 		const batchSize = sequences.length;
-		const topPaths = CTCDecoder.topPaths;
+		const topPaths = CTCGreedyDecoder.topPaths;
+		let numEntries = Array(topPaths).fill(0)
 		
-		let numEntries = Array(topPaths)
-		for (let batch_s of sequences)
-			for (let path = 0; path < topPaths; ++path)
-				numEntries[path] += batch_s[path].length;
+		for (let sequence of sequences) {
+			if (this.debug)
+			
+			if (sequence.length !== topPaths)
+				throw Error("sequence !== topPaths");
+			
+			for (let path = 0; path < topPaths; ++path) {
+				numEntries[path] += sequence[path].length;
+				if (this.debug){
+					console.log("Path:      ", path)
+					console.log("NumEntrs:  ", numEntries[path])
+				}
+			}
+		}
 		
 		for (let path = 0; path < topPaths; ++path) {
 			const pNum = numEntries[path];
-			
-			let indices = tf.TensorBuffer([pNum, 2], "float32")
-			let values = tf.TensorBuffer([pNum], "int32")
-			let shape = tf.TensorBuffer([2], "float32")
+			let indices = tf.buffer([pNum, 2], "float32")
+			let values = tf.buffer([pNum], "int32")
+			let shape = tf.buffer([2], "float32")
 			
 			let maxDecoded = 0;
 			let offset = 0;
@@ -144,18 +169,30 @@ export class CTCGreedyDecoder extends CTCDecoder {
 				let batch = sequences[b][path];
 				let numDecoded = batch.length;
 				maxDecoded = Math.max(maxDecoded, numDecoded);
+				
 				if (numDecoded > 0) {
-					if (offset > values.size())
+					if (offset > values.size)
 						throw Error("Offset should be smaller than values_t.size()");
+					
+					for (let k = 0; k < numDecoded; ++k) {
+						values.set(batch[k], offset + k)
+					}
 				}
 				for (let t = 0; t < numDecoded; ++t, ++offset) {
 					indices.set(b, offset, 0);
 					indices.set(t, offset, 1);
 				}
 			}
-			
 			shape.set(batchSize, 0);
 			shape.set(maxDecoded, 1);
+			
+			if (this.debug) {
+				console.log("BatchSize: ", batchSize)
+			}
+			
+			this.indices_.push(indices.toTensor())
+			this.values_.push(values.toTensor());
+			this.shape_.push(shape.toTensor())
 		}
 	}
 }
