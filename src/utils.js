@@ -1,14 +1,11 @@
-import jsYaml  from "js-yaml";
-import {JSDOM} from "jsdom";
-
-import * as tf  from "@tensorflow/tfjs-node";
-import * as fs  from "fs";
-import {cv}     from "opencv-wasm";
-import canvas   from "canvas"
-import jsonfile from "jsonfile";
-
-const PERMUTATION = [1, 0, 2];
-const EPSILON = 1e-7;
+import * as tf     from "@tensorflow/tfjs-node";
+import * as fs     from "fs";
+import jsYaml      from "js-yaml";
+import canvas      from "canvas"
+import jsonfile    from "jsonfile";
+import {JSDOM}     from "jsdom";
+import {cv}        from "opencv-wasm";
+import {DATA_ROOT} from "./constants.js";
 
 const {loadImage, createCanvas, Canvas, Image, ImageData} = canvas;
 
@@ -16,6 +13,12 @@ function assert(expr, msg) {
 	if (!expr) {
 		throw new Error(typeof msg === 'string' ? msg : msg());
 	}
+}
+
+export function pathJoin(...chunks) {
+	var separator = '/';
+	var replace = new RegExp(`${separator}{3}`, 'g');
+	return chunks.join(separator).replace(replace, separator);
 }
 
 function printMap(map, lineLen) {
@@ -77,28 +80,34 @@ export function cvToTensor(image) {
 	return tensor;
 }
 
-export function readParams(file_path, base = 'models') {
-	const contents = fs.readFileSync(file_path)
-	if (base)
-		return jsYaml.load(contents)[base]
-	else
-		return jsYaml.load(contents)
+export function readParams(file_path, defaultKey = 'models') {
+	const contents = fs.readFileSync(file_path);
+	return (defaultKey !== '')
+	       ? jsYaml.load(contents)[defaultKey]
+	       : jsYaml.load(contents);
+}
+
+export async function readWeightMaps(manifest, prefix = '') {
+	const load = tf.io.weightsLoaderFactory(
+		filePaths => filePaths.map(filePath => fs.readFileSync(filePath).buffer)
+	);
+	return load(manifest, prefix);
 }
 
 /// tensorflow specific utilities
 
 export function rowMax(tensor, rowIndex) {
-	const buffer = tensor.bufferSync()
+	const buffer = tensor.bufferSync();
 	let maxCol = 0;
 	
 	if (!tensor.shape[1])
-		throw Error("Dimension must be 1")
+		throw Error("Dimension must be 1");
 	
-	let maxProb = buffer.get(rowIndex, 0)
+	let maxProb = buffer.get(rowIndex, 0);
 	for (let i = 0; i < tensor.shape[1]; ++i) {
 		if (buffer.get(rowIndex, i) > maxProb) {
 			maxProb = buffer.get(rowIndex, i);
-			maxCol = i
+			maxCol = i;
 		}
 	}
 	return [maxProb, maxCol];
@@ -111,8 +120,8 @@ export function rowMax(tensor, rowIndex) {
  * */
 export function ones(shape) {
 	if (!(shape instanceof Array))
-		shape = [shape]
-	return tf.ones(shape)
+		shape = [shape];
+	return tf.ones(shape);
 }
 
 /**
@@ -135,13 +144,13 @@ export function mulScalar(tensor, scalar, dtype = "int32") {
 export function saveModelAsJSON(path, model) {
 	jsonfile.writeFile(
 		path, model.toJSON(), () => console.log("Model save finished.")
-	)
+	);
 }
 
 export function loadModelFromJSON(path) {
 	let object = null;
 	try {
-		object = jsonfile.readFileSync(path, {encoding: 'utf-8', flag: 'r'})
+		object = jsonfile.readFileSync(path, {encoding: 'utf-8', flag: 'r'});
 	} catch (e) {
 		console.error(e);
 	}
@@ -161,7 +170,7 @@ export async function cvWrite(img, file_path) {
 	try {
 		const canvas = createCanvas(300, 300);
 		cv.imshow(canvas, img);
-		fs.writeFileSync(file_path, canvas.toBuffer('image/jpeg'));
+		fs.writeFileSync(file_path, canvas.toBuffer('image/png'));
 	} catch (e) {
 		console.error(cvTranslateError(e));
 	}
@@ -215,7 +224,7 @@ function cvTranslateError(err) {
  * @param {Object} params
  * @param {boolean} write Write the result image to filesystem
  * */
-export async function processImage(img_path,
+export async function processImage(imgPath,
                                    params,
                                    write = true) {
 	const width = params['width'];
@@ -224,10 +233,10 @@ export async function processImage(img_path,
 	const ratio = Math.floor(width / height);
 	const color = params['fill_color'];
 	try {
-		let src = await cvRead(img_path);
+		let src = await cvRead(imgPath);
 		let dst = new cv.Mat();
 		// Turn source image to RGB reducing the number of channels
-		cv.cvtColor(src, src, cv.COLOR_RGBA2RGB, 0);
+		cv.cvtColor(src, src, cv.COLOR_RGBA2BGR, 0);
 		let w = src.cols;
 		let h = src.rows;
 		
@@ -259,16 +268,14 @@ export async function processImage(img_path,
 		cv.resize(dst, dst, new cv.Size(width, height), cv.INTER_LINEAR);
 		if (net_chanels === 1) {
 			cv.cvtColor(dst, dst, cv.COLOR_BGR2GRAY);
-			// noinspection JSUnresolvedFunction
-			dst = tf.expandDims(dst, 2);
 		}
 		const mat255 = cv.Mat.zeros(dst.rows, dst.cols, cv.CV_8U);
 		cv.cvtColor(mat255, mat255, cv.COLOR_GRAY2BGR);
-		mat255.data.fill(255);
 		cv.divide(dst, mat255, dst);
 		
 		if (write)
-			await cvWrite(dst, 'models/output.png')
+			cvWrite(dst, pathJoin(DATA_ROOT, 'output.png'))
+				.then("Image saved successfully");
 		src.delete();
 		mat255.delete();
 		return dst;
@@ -278,5 +285,3 @@ export async function processImage(img_path,
 		return null;
 	}
 }
-
-export {PERMUTATION, EPSILON};
