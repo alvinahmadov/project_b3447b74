@@ -1,7 +1,8 @@
 import * as tf from "@tensorflow/tfjs-node";
-
-const BLOCKS = [6, 12, 24, 16];
-const AXIS = 3;
+import {
+	AXIS,
+	BLOCKS
+}              from "./constants.js";
 
 class Densenet extends tf.LayersModel {
 	static className = 'Functional';
