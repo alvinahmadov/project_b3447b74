@@ -6,6 +6,16 @@ export const DATA_ROOT = 'data'
 export const MODEL_ROOT = 'models'
 export const WEIGHTS_KEY = 'weightsManifest'
 
+export const PTYPE = {
+	T1: "type1",
+	T3: "type3",
+	T4: "type4",
+	T5: "type5",
+	T6: "type6",
+	T7: "type7",
+	T8: "type8"
+}
+
 export const DEFAULT_GRU_ARGS_T8 = {
 	name:                'GRU',
 	units:               256,
