@@ -27,6 +27,8 @@ export class ConfigParser {
 	 * @returns {number}
 	 * */
 	get width() {
+		if (!this.typename)
+			return null
 		return this.params[this.typename]['width'];
 	}
 	
@@ -34,6 +36,8 @@ export class ConfigParser {
 	 * @returns {number}
 	 * */
 	get height() {
+		if (!this.typename)
+			return null
 		return this.params[this.typename]['height'];
 	}
 	
@@ -41,6 +45,8 @@ export class ConfigParser {
 	 * @returns {number}
 	 * */
 	get netChanels() {
+		if (!this.typename)
+			return null
 		return this.params[this.typename]['net_chanels'];
 	}
 	
@@ -48,6 +54,8 @@ export class ConfigParser {
 	 * @returns {number}
 	 * */
 	get fillColor() {
+		if (!this.typename)
+			return null
 		return this.params[this.typename]['fill_color'];
 	}
 	
@@ -55,6 +63,8 @@ export class ConfigParser {
 	 * @returns {string}
 	 * */
 	get letters() {
+		if (!this.typename)
+			return null
 		return this.params[this.typename]['letters'];
 	}
 	
@@ -62,10 +72,14 @@ export class ConfigParser {
 	 * @returns {number}
 	 * */
 	get ctcInputLength() {
+		if (!this.typename)
+			return null
 		return this.params[this.typename]['ctc_input_length'];
 	}
 	
 	get maxLabelLength() {
+		if (!this.typename)
+			return null
 		return this.params[this.typename]['max_label_length'];
 	}
 	
@@ -73,25 +87,17 @@ export class ConfigParser {
 	 * @returns {string} path
 	 * */
 	get modelPath() {
+		if (!this.typename)
+			return null
 		return this.params[this.typename]['model_path'];
 	}
 	
 	get modelJSON() {
+		if (!this.typename)
+			return null
 		if (!this.modelPath.includes('.json'))
 			throw Error("Not a json file: ", this.modelPath);
 		
 		return loadModelFromJSON(this.modelPath)
-	}
-	
-	//TODO(Alvin): Implement reading from pretrained weights file
-	loadWeights(model, strict = true) {
-		try {
-			
-			// model.loadWeights(this.modelJSON['weightsManifest'][0], strict);
-			return true;
-		} catch (e) {
-			console.error(e)
-			return null;
-		}
 	}
 }
