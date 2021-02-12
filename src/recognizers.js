@@ -18,88 +18,23 @@ import {
 	DATA_ROOT,
 	MODEL_ROOT,
 	WEIGHTS_KEY,
+	PTYPE,
 	DEFAULT_GRU_ARGS_T8
 }                         from "./constants.js"
 
-class Processor {
-	constructor(path, type) {
+class PredictorBase {
+	constructor(path, type, debug) {
 		this.parser = new ConfigParser(path, type);
+		this.debug = debug;
 	}
 	
-	get model() {
+	model() {
 		throw Error("Not implemented");
-	}
-	
-	async predict(image_path, shardsPrefix) {
-		throw Error("Not implemented");
-	}
-}
-
-// noinspection JSUnresolvedVariable,JSUnresolvedFunction
-export class ProcessorType8 extends Processor {
-	/**
-	 * Constructor of ProcessorType8.
-	 *
-	 * @param {string} path Path to the parameters file
-	 * @param {boolean} debug Show debugging messages.
-	 */
-	constructor(path, debug = true) {
-		super(path, 'type8');
-		this.debug = debug
-	}
-	
-	/**
-	 * Get the pretrained model.
-	 */
-	get model() {
-		const inputShape = [this.parser.height,
-		                    this.parser.width,
-		                    this.parser.netChanels];
-		
-		let inputs = tf.input({name: "input_1", shape: inputShape});
-		
-		let denseNet = densenet(inputShape).apply(inputs);
-		
-		let squeezed = new Lambda((x) => tf.squeeze(x, 1))
-			.apply(denseNet);
-		
-		let reshaped = tf.layers.reshape({name: 'reshape', targetShape: [24, 128]})
-			.apply(squeezed);
-		
-		let blstm_1 = tf.layers.bidirectional({
-			                                      name:      'bidirectional',
-			                                      layer:     tf.layers.gru(DEFAULT_GRU_ARGS_T8),
-			                                      mergeMode: "concat"
-		                                      })
-			.apply(reshaped);
-		
-		let blstm_2 = tf.layers.bidirectional({
-			                                      name:      'bidirectional_1',
-			                                      layer:     tf.layers.gru(DEFAULT_GRU_ARGS_T8),
-			                                      mergeMode: "concat"
-		                                      })
-			.apply(blstm_1);
-		
-		let outputs = tf.layers.dense({
-			                              name:       "dense",
-			                              units:      this.parser.letters.length + 1,
-			                              activation: "softmax"
-		                              })
-			.apply(blstm_2);
-		
-		const model = tf.model({inputs: inputs, outputs: outputs});
-		
-		if (this.debug) {
-			model.summary();
-			saveModelAsJSON(pathJoin(DATA_ROOT, MODEL_ROOT, 'debug_model.json'), model);
-		}
-		
-		return model;
 	}
 	
 	async predict(image_path, shardsPrefix) {
 		let result = "";
-		const model = this.model
+		const model = this.model()
 		
 		try {
 			const image = await processImage(image_path, this.parser.parameters);
@@ -144,5 +79,145 @@ export class ProcessorType8 extends Processor {
 		}
 		return result;
 		// const sample = [3, 18, 29, 7, 30, 19]
+	}
+}
+
+class PredictorType3 extends PredictorBase {
+	constructor(path, debug = false) {
+		super(path, PTYPE.T3, debug);
+	}
+	
+	model() {}
+}
+
+class PredictorType4 extends PredictorBase {
+	constructor(path, debug = false) {
+		super(path, PTYPE.T4, debug);
+	}
+	
+	model() {}
+}
+
+class PredictorType5 extends PredictorBase {
+	constructor(path, debug = false) {
+		super(path, PTYPE.T5, debug);
+	}
+	
+	model() {}
+}
+
+class PredictorType6 extends PredictorBase {
+	constructor(path, debug = false) {
+		super(path, PTYPE.T6, debug);
+	}
+	
+	model() {}
+}
+
+class PredictorType7 extends PredictorBase {
+	constructor(path, debug = false) {
+		super(path, PTYPE.T7, debug);
+	}
+	
+	model() {}
+}
+
+class PredictorType8 extends PredictorBase {
+	/**
+	 * Constructor of PredictorType8.
+	 *
+	 * @param {string} path Path to the parameters file
+	 * @param {boolean} debug Show debugging messages.
+	 */
+	constructor(path, debug = false) {
+		super(path, PTYPE.T8, debug);
+	}
+	
+	/**
+	 * Get the pretrained model.
+	 */
+	model() {
+		const inputShape = [this.parser.height,
+		                    this.parser.width,
+		                    this.parser.netChanels];
+		
+		let inputs = tf.input({name: "input_1", shape: inputShape});
+		
+		let denseNet = densenet(inputShape).apply(inputs);
+		
+		let squeezed = new Lambda((x) => tf.squeeze(x, 1))
+			.apply(denseNet);
+		
+		let reshaped = tf.layers.reshape({name: 'reshape', targetShape: [24, 128]})
+			.apply(squeezed);
+		
+		let blstm_1 = tf.layers.bidirectional({
+			                                      name:      'bidirectional',
+			                                      layer:     tf.layers.gru(DEFAULT_GRU_ARGS_T8),
+			                                      mergeMode: "concat"
+		                                      })
+			.apply(reshaped);
+		
+		let blstm_2 = tf.layers.bidirectional({
+			                                      name:      'bidirectional_1',
+			                                      layer:     tf.layers.gru(DEFAULT_GRU_ARGS_T8),
+			                                      mergeMode: "concat"
+		                                      })
+			.apply(blstm_1);
+		
+		let outputs = tf.layers.dense({
+			                              name:       "dense",
+			                              units:      this.parser.letters.length + 1,
+			                              activation: "softmax"
+		                              })
+			.apply(blstm_2);
+		
+		const model = tf.model({inputs: inputs, outputs: outputs});
+		
+		if (this.debug) {
+			model.summary();
+			saveModelAsJSON(pathJoin(DATA_ROOT, MODEL_ROOT, 'debug_model.json'), model);
+		}
+		
+		return model;
+	}
+}
+
+export class Predictor {
+	constructor(path, debug) {
+		this.path = path;
+		this.debug = debug;
+	}
+	
+	async run(type, image_path, shardsPrefix) {
+		let predictor = null;
+		
+		switch (type) {
+			case PTYPE.T1:
+				predictor = new PredictorType4(this.path, this.debug);
+				break;
+			case PTYPE.T3:
+				predictor = new PredictorType3(this.path, this.debug);
+				break;
+			case PTYPE.T4:
+				predictor = new PredictorType4(this.path, this.debug);
+				break;
+			case PTYPE.T5:
+				predictor = new PredictorType5(this.path, this.debug);
+				break;
+			case PTYPE.T6:
+				predictor = new PredictorType6(this.path, this.debug);
+				break;
+			case PTYPE.T7:
+				predictor = new PredictorType7(this.path, this.debug);
+				break;
+			case PTYPE.T8:
+				predictor = new PredictorType8(this.path, this.debug);
+				break;
+			default:
+				throw Error("Undefined type")
+		}
+		
+		return predictor.predict(image_path, shardsPrefix);
 	}
 }
