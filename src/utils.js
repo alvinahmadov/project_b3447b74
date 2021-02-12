@@ -15,11 +15,16 @@ function assert(expr, msg) {
 	}
 }
 
+// String
+
 export function pathJoin(...chunks) {
 	var separator = '/';
 	var replace = new RegExp(`${separator}{3}`, 'g');
 	return chunks.join(separator).replace(replace, separator);
 }
+
+/// String
+// IO
 
 function printMap(map, lineLen) {
 	let res = '{ '
@@ -66,18 +71,13 @@ export function printData(data, lineLen = 10, name = null) {
 	console.log(out)
 }
 
+/// IO
+
 export function toList(x) {
 	if (Array.isArray(x)) {
 		return x;
 	}
 	return [x];
-}
-
-export function cvToTensor(image) {
-	let tensor = tf.tensor3d(image.data, [image.rows, image.cols, 3]);
-	image.delete();
-	tensor = tf.expandDims(tensor, 0);
-	return tensor;
 }
 
 export function readParams(file_path, defaultKey = 'models') {
@@ -87,14 +87,21 @@ export function readParams(file_path, defaultKey = 'models') {
 	       : jsYaml.load(contents);
 }
 
+// Tensorflow
+
+export function cvToTensor(image) {
+	let tensor = tf.tensor3d(image.data, [image.rows, image.cols, 3]);
+	image.delete();
+	tensor = tf.expandDims(tensor, 0);
+	return tensor;
+}
+
 export async function readWeightMaps(manifest, prefix = '') {
 	const load = tf.io.weightsLoaderFactory(
 		filePaths => filePaths.map(filePath => fs.readFileSync(filePath).buffer)
 	);
 	return load(manifest, prefix);
 }
-
-/// tensorflow specific utilities
 
 export function rowMax(tensor, rowIndex) {
 	const buffer = tensor.bufferSync();
@@ -157,7 +164,8 @@ export function loadModelFromJSON(path) {
 	return object;
 }
 
-/// opencv specific utilities
+/// Tensorflow
+// Image
 
 export async function cvRead(img_path) {
 	installDOM();
@@ -165,7 +173,6 @@ export async function cvRead(img_path) {
 	return cv.imread(image);
 }
 
-// opencv specific
 export async function cvWrite(img, file_path) {
 	try {
 		const canvas = createCanvas(300, 300);
@@ -219,8 +226,34 @@ function cvTranslateError(err) {
 	return error_stmt;
 }
 
+function _processHImg(src, h, w, ratio, color) {
+	let dst = new cv.Mat();
+	let white = new cv.Mat.zeros(h, w, cv.CV_8U);
+	// match the channel numbers of the two image
+	cv.cvtColor(white, white, cv.COLOR_GRAY2BGR);
+	white.data.fill(color);
+	let matVector = cvCreateMatVector(src, white);
+	// extend source image horizontally
+	cv.hconcat(matVector, dst);
+	white.delete();
+	return dst;
+}
+
+function _processVImg(src, h, w, ratio, color) {
+	let dst = new cv.Mat();
+	let white = new cv.Mat.zeros(h, w, cv.CV_8U);
+	// match the channel numbers of the two image
+	cv.cvtColor(white, white, cv.COLOR_GRAY2BGR);
+	white.data.fill(color);
+	let matVector = cvCreateMatVector(white, src, white);
+	// extend source image vertically
+	cv.vconcat(matVector, dst);
+	white.delete();
+	return dst;
+}
+
 /**
- * @param {string} img_path Path to the image to be processed
+ * @param {string} imgPath Path to the image to be processed
  * @param {Object} params
  * @param {boolean} write Write the result image to filesystem
  * */
@@ -234,7 +267,7 @@ export async function processImage(imgPath,
 	const color = params['fill_color'];
 	try {
 		let src = await cvRead(imgPath);
-		let dst = new cv.Mat();
+		let dst;
 		// Turn source image to RGB reducing the number of channels
 		cv.cvtColor(src, src, cv.COLOR_RGBA2BGR, 0);
 		let w = src.cols;
@@ -243,25 +276,9 @@ export async function processImage(imgPath,
 		// Find image orientation and choose right op
 		if (w / h !== ratio) {
 			if (w / h < ratio) {
-				w = (ratio * h) - w;
-				let white = new cv.Mat.zeros(h, w, cv.CV_8U);
-				// match the channel numbers of the two image
-				cv.cvtColor(white, white, cv.COLOR_GRAY2BGR);
-				white.data.fill(color);
-				let matVector = cvCreateMatVector(src, white);
-				// extend source image horizontally
-				cv.hconcat(matVector, dst);
-				white.delete();
+				dst = _processHImg(src, h, (ratio * h) - w, ratio, color);
 			} else if (w / h > ratio) {
-				let _h = Math.floor((w - ratio * h) / (ratio * 2));
-				let white = new cv.Mat.zeros(_h, w, cv.CV_8U);
-				// match the channel numbers of the two image
-				cv.cvtColor(white, white, cv.COLOR_GRAY2BGR);
-				white.data.fill(color);
-				let matVector = cvCreateMatVector(white, src, white);
-				// extend source image vertically
-				cv.vconcat(matVector, dst);
-				white.delete();
+				dst = _processVImg(src, Math.floor((w - ratio * h) / (ratio * 2)), w, ratio, color);
 			}
 		}
 		
@@ -285,3 +302,5 @@ export async function processImage(imgPath,
 		return null;
 	}
 }
+
+/// Image
