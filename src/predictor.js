@@ -28,16 +28,27 @@ class PredictorBase {
 		this.debug = debug;
 	}
 	
+	/**
+	 * Must be implemented in derived classes
+	 * */
 	model() {
 		throw Error("Not implemented");
 	}
 	
-	async predict(image_path, shardsPrefix) {
+	/**
+	 * Main logic is same for all types of input data
+	 *
+	 * @param {string} imagePath
+	 * @param {string} shardsPrefix
+	 *
+	 * @returns {Promise<string>}
+	 * */
+	async predict(imagePath, shardsPrefix) {
 		let result = "";
 		const model = this.model()
 		
 		try {
-			const image = await processImage(image_path, this.parser.parameters);
+			const image = await processImage(imagePath, this.parser.parameters);
 			
 			return readWeightMaps(this.parser.modelJSON[WEIGHTS_KEY],
 			                      shardsPrefix).then((weightsMap) => {
@@ -82,6 +93,14 @@ class PredictorBase {
 	}
 }
 
+class PredictorType1 extends PredictorBase {
+	constructor(path, debug = false) {
+		super(path, PTYPE.T1, debug);
+	}
+	
+	model() {}
+}
+
 class PredictorType3 extends PredictorBase {
 	constructor(path, debug = false) {
 		super(path, PTYPE.T3, debug);
@@ -101,22 +120,6 @@ class PredictorType4 extends PredictorBase {
 class PredictorType5 extends PredictorBase {
 	constructor(path, debug = false) {
 		super(path, PTYPE.T5, debug);
-	}
-	
-	model() {}
-}
-
-class PredictorType6 extends PredictorBase {
-	constructor(path, debug = false) {
-		super(path, PTYPE.T6, debug);
-	}
-	
-	model() {}
-}
-
-class PredictorType7 extends PredictorBase {
-	constructor(path, debug = false) {
-		super(path, PTYPE.T7, debug);
 	}
 	
 	model() {}
@@ -183,18 +186,25 @@ class PredictorType8 extends PredictorBase {
 	}
 }
 
-export class Predictor {
+class Predictor {
 	constructor(path, debug) {
 		this.path = path;
 		this.debug = debug;
 	}
 	
-	async run(type, image_path, shardsPrefix) {
-		let predictor = null;
-		
+	/**
+	 * Run predictions
+	 *
+	 * @param {string} type Type of prediction.
+	 * @param {string} imagePath Path to the image to be processed.
+	 * @param {string} shardsPrefix Prefix to the location of shard files (*.bin)
+	 * @returns {Promise<string>} Recognized text
+	 * */
+	async run(type, imagePath, shardsPrefix) {
+		let predictor;
 		switch (type) {
 			case PTYPE.T1:
-				predictor = new PredictorType4(this.path, this.debug);
+				predictor = new PredictorType1(this.path, this.debug);
 				break;
 			case PTYPE.T3:
 				predictor = new PredictorType3(this.path, this.debug);
@@ -206,11 +216,7 @@ export class Predictor {
 				predictor = new PredictorType5(this.path, this.debug);
 				break;
 			case PTYPE.T6:
-				predictor = new PredictorType6(this.path, this.debug);
-				break;
 			case PTYPE.T7:
-				predictor = new PredictorType7(this.path, this.debug);
-				break;
 			case PTYPE.T8:
 				predictor = new PredictorType8(this.path, this.debug);
 				break;
@@ -218,6 +224,8 @@ export class Predictor {
 				throw Error("Undefined type")
 		}
 		
-		return predictor.predict(image_path, shardsPrefix);
+		return predictor.predict(imagePath, shardsPrefix);
 	}
 }
+
+export {Predictor}
