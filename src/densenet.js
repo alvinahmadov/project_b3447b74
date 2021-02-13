@@ -1,3 +1,7 @@
+/**
+ * Alvin Ahmadov [https://github.com/AlvinAhmadov]
+ * */
+
 import * as tf from "@tensorflow/tfjs-node";
 import {
 	AXIS,
@@ -28,24 +32,30 @@ function convBlock(name, inputs, growth_rate,
 	let outputs = tf.layers.batchNormalization({axis: AXIS, epsilon: 1.001e-5, name: name + '_0_bn'})
 		.apply(inputs);
 	
-	outputs = tf.layers.activation({name: name + '_0_relu', activation: 'relu'})
+	outputs = tf.layers.activation({name: name + '_0_relu', activation: 'relu', dtype: 'float32'})
 		.apply(outputs);
 	
-	outputs = tf.layers.conv2d({name: name + '_1_conv', filters: 4 * growth_rate, kernelSize: 1, useBias: false})
+	outputs = tf.layers.conv2d({
+		                           name:  name + '_1_conv', filters: 4 * growth_rate, kernelSize: 1, useBias: false,
+		                           dtype: 'float32', kernelInitializer: 'glorotUniform'
+	                           })
 		.apply(outputs);
 	
-	outputs = tf.layers.batchNormalization({name: name + '_1_bn', axis: AXIS, epsilon: 1.001e-5})
+	outputs = tf.layers.batchNormalization({name: name + '_1_bn', axis: [AXIS], epsilon: 1.001e-5})
 		.apply(outputs);
 	
 	outputs = tf.layers.activation({name: name + '_1_relu', activation: 'relu'})
 		.apply(outputs);
 	
 	outputs = tf.layers.conv2d(
-		{name: name + '_2_conv', filters: growth_rate, kernelSize: 3, padding: 'same', useBias: false}
+		{
+			name:  name + '_2_conv', filters: growth_rate, kernelSize: 3, padding: 'same', useBias: false,
+			dtype: 'float32', kernelInitializer: 'glorotUniform'
+		}
 	).apply(outputs);
 	
 	inputs = tf.layers.concatenate(
-		{name: name + '_concat', axis: AXIS}
+		{name: name + '_concat', axis: AXIS, dtype: 'float32'}
 	).apply([inputs, outputs]);
 	
 	if (debug)
@@ -86,7 +96,8 @@ function transitionBlock(name, inputs, reduction,
 	inputs = tf.layers.batchNormalization(
 		{
 			name:    name + '_bn',
-			axis:    AXIS,
+			axis:    [AXIS],
+			dtype:   'float32',
 			epsilon: 1.001e-5
 		}
 	).apply(inputs);
@@ -94,23 +105,23 @@ function transitionBlock(name, inputs, reduction,
 	inputs = tf.layers.activation(
 		{
 			name:       name + '_relu',
-			activation: 'relu'
+			activation: 'relu',
+			dtype:      'float32',
 		}
 	).apply(inputs);
 	
 	inputs = tf.layers.conv2d(
 		{
-			name:       name + '_conv',
-			filters:    parseInt(inputs.shape[AXIS] * reduction),
-			kernelSize: 1,
-			useBias:    false
+			name:    name + '_conv', filters: parseInt(inputs.shape[AXIS] * reduction),
+			dtype:   'float32', dilationRate: 1, kernelInitializer: 'glorotUniform',
+			strides: 1, kernelSize: 1, useBias: false
 		}
 	).apply(inputs);
 	
 	let outputs = tf.layers.averagePooling2d(
 		{
 			name:    name + '_pool', poolSize: 2,
-			strides: 2
+			strides: 2, dtype: 'float32',
 		}
 	).apply(inputs);
 	
@@ -121,22 +132,29 @@ function transitionBlock(name, inputs, reduction,
 }
 
 function densenetPrepare(inputs, debug = false) {
-	let outputs = tf.layers.zeroPadding2d({padding: [[3, 3], [3, 3]]})
+	let outputs = tf.layers.zeroPadding2d({name: "zero_padding2d", padding: [[3, 3], [3, 3]]})
 		.apply(inputs);
 	
-	outputs = tf.layers.conv2d({name: 'conv1/conv', filters: 64, kernelSize: 7, strides: 2, useBias: false})
+	outputs = tf.layers.conv2d({
+		                           name:              'conv1/conv', filters: 64, kernelSize: 7,
+		                           kernelInitializer: 'glorotUniform', strides: 2,
+		                           activation:        'linear', padding: 'valid', useBias: false
+	                           })
 		.apply(outputs);
 	
 	outputs = tf.layers.batchNormalization({name: 'conv1/bn', axis: AXIS, epsilon: 1.001e-5})
 		.apply(outputs);
 	
-	outputs = tf.layers.activation({name: 'conv1/relu', activation: 'relu'})
+	outputs = tf.layers.activation({name: 'conv1/relu', activation: 'relu', dtype: 'float32'})
 		.apply(outputs);
 	
-	outputs = tf.layers.zeroPadding2d({padding: [[1, 1], [1, 1]]})
+	outputs = tf.layers.zeroPadding2d({
+		                                  name:  'zero_padding2d_1', padding: [[1, 1], [1, 1]],
+		                                  dtype: 'float32'
+	                                  })
 		.apply(outputs);
 	
-	outputs = tf.layers.maxPooling2d({name: 'pool1', poolSize: 3, strides: 2})
+	outputs = tf.layers.maxPooling2d({name: 'pool1', poolSize: 3, strides: 2, dtype: 'float32'})
 		.apply(outputs);
 	
 	outputs = denseBlock('conv2', outputs, BLOCKS[0], debug);
@@ -147,7 +165,7 @@ function densenetPrepare(inputs, debug = false) {
 	outputs = transitionBlock('pool4', outputs, 0.5, debug);
 	outputs = denseBlock('conv5', outputs, BLOCKS[3], debug);
 	
-	outputs = tf.layers.batchNormalization({name: 'bn', axis: AXIS, epsilon: 1.001e-5})
+	outputs = tf.layers.batchNormalization({name: 'bn', axis: [AXIS], epsilon: 1.001e-5})
 		.apply(outputs);
 	
 	outputs = tf.layers.activation({name: 'relu', activation: 'relu'})
@@ -157,7 +175,7 @@ function densenetPrepare(inputs, debug = false) {
 }
 
 export function densenet(shape, debug = false) {
-	const inputs = tf.input({shape: shape})
+	const inputs = tf.input({name: "input_2", shape: shape})
 	const outputs = densenetPrepare(inputs, debug)
 	
 	return new Densenet({name: 'densenet121', inputs: inputs, outputs: outputs});
