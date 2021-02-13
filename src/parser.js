@@ -1,3 +1,7 @@
+/**
+ * Alvin Ahmadov [https://github.com/AlvinAhmadov]
+ * */
+
 import {
 	readParams,
 	loadModelFromJSON,
