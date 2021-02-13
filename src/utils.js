@@ -1,3 +1,6 @@
+/**
+ * Alvin Ahmadov [https://github.com/AlvinAhmadov]
+ * */
 import * as tf     from "@tensorflow/tfjs-node";
 import * as fs     from "fs";
 import jsYaml      from "js-yaml";
@@ -9,7 +12,7 @@ import {DATA_ROOT} from "./constants.js";
 
 const {loadImage, createCanvas, Canvas, Image, ImageData} = canvas;
 
-function assert(expr, msg) {
+export function assert(expr, msg) {
 	if (!expr) {
 		throw new Error(typeof msg === 'string' ? msg : msg());
 	}
@@ -88,13 +91,6 @@ export function readParams(file_path, defaultKey = 'models') {
 }
 
 // Tensorflow
-
-export function cvToTensor(image) {
-	let tensor = tf.tensor3d(image.data, [image.rows, image.cols, 3]);
-	image.delete();
-	tensor = tf.expandDims(tensor, 0);
-	return tensor;
-}
 
 export async function readWeightMaps(manifest, prefix = '') {
 	const load = tf.io.weightsLoaderFactory(
@@ -228,11 +224,10 @@ function cvTranslateError(err) {
 
 function _processHImg(src, h, w, ratio, color) {
 	let dst = new cv.Mat();
-	let white = new cv.Mat.zeros(h, w, cv.CV_8U);
-	// match the channel numbers of the two image
-	cv.cvtColor(white, white, cv.COLOR_GRAY2BGR);
+	const white = new cv.Mat.ones(h, w, cv.CV_8UC3);
 	white.data.fill(color);
-	let matVector = cvCreateMatVector(src, white);
+	// match the channel numbers of the two image
+	const matVector = cvCreateMatVector(src, white);
 	// extend source image horizontally
 	cv.hconcat(matVector, dst);
 	white.delete();
@@ -241,11 +236,9 @@ function _processHImg(src, h, w, ratio, color) {
 
 function _processVImg(src, h, w, ratio, color) {
 	let dst = new cv.Mat();
-	let white = new cv.Mat.zeros(h, w, cv.CV_8U);
-	// match the channel numbers of the two image
-	cv.cvtColor(white, white, cv.COLOR_GRAY2BGR);
+	const white = new cv.Mat.ones(h, w, cv.CV_8UC3);
 	white.data.fill(color);
-	let matVector = cvCreateMatVector(white, src, white);
+	const matVector = cvCreateMatVector(white, src, white);
 	// extend source image vertically
 	cv.vconcat(matVector, dst);
 	white.delete();
@@ -262,7 +255,7 @@ export async function processImage(imgPath,
                                    write = true) {
 	const width = params['width'];
 	const height = params['height'];
-	const net_chanels = params['net_chanels'];
+	const net_chanels = params['net_channels'];
 	const ratio = Math.floor(width / height);
 	const color = params['fill_color'];
 	try {
@@ -281,21 +274,18 @@ export async function processImage(imgPath,
 				dst = _processVImg(src, Math.floor((w - ratio * h) / (ratio * 2)), w, ratio, color);
 			}
 		}
-		
 		cv.resize(dst, dst, new cv.Size(width, height), cv.INTER_LINEAR);
 		if (net_chanels === 1) {
 			cv.cvtColor(dst, dst, cv.COLOR_BGR2GRAY);
 		}
-		const mat255 = cv.Mat.zeros(dst.rows, dst.cols, cv.CV_8U);
-		cv.cvtColor(mat255, mat255, cv.COLOR_GRAY2BGR);
-		cv.divide(dst, mat255, dst);
 		
-		if (write)
-			cvWrite(dst, pathJoin(DATA_ROOT, 'output.png'))
-				.then("Image saved successfully");
+		let imgTensor = tf.tensor3d(dst.data, [dst.rows, dst.cols, net_chanels], "float32");
+		imgTensor = tf.div(imgTensor, tf.scalar(255.0));
+		
 		src.delete();
-		mat255.delete();
-		return dst;
+		dst.delete();
+		imgTensor = tf.expandDims(imgTensor, 0)
+		return imgTensor;
 	} catch (e) {
 		console.error(cvTranslateError(e));
 		src.delete();
