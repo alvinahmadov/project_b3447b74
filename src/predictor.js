@@ -1,3 +1,7 @@
+/**
+ * Alvin Ahmadov [https://github.com/AlvinAhmadov]
+ * */
+
 import * as tf            from "@tensorflow/tfjs-node";
 import {ConfigParser}     from "./parser.js";
 import {CTCGreedyDecoder} from "./decoder.js";
@@ -7,7 +11,6 @@ import {
 	processImage,
 	saveModelAsJSON,
 	readWeightMaps,
-	cvToTensor,
 	ones,
 	mulScalar,
 	pathJoin
@@ -18,8 +21,7 @@ import {
 	DATA_ROOT,
 	MODEL_ROOT,
 	WEIGHTS_KEY,
-	PTYPE,
-	DEFAULT_GRU_ARGS_T8
+	PTYPE
 }                         from "./constants.js"
 
 class PredictorBase {
@@ -45,51 +47,52 @@ class PredictorBase {
 	 * */
 	async predict(imagePath, shardsPrefix) {
 		let result = "";
-		const model = this.model()
-		
+		const model = this.model();
 		try {
 			const image = await processImage(imagePath, this.parser.parameters);
 			
 			return readWeightMaps(this.parser.modelJSON[WEIGHTS_KEY],
 			                      shardsPrefix).then((weightsMap) => {
-				const imgTensor = cvToTensor(image);
-				model.loadWeights(weightsMap, false);
-				const predictions = model.predict(imgTensor);
-				let input = tf.log(tf.add(tf.transpose(predictions, PERMUTATION), EPSILON));
+				model.loadWeights(weightsMap);
+				const predictions = model.predict(image);
+				let input = tf.log(tf.add(tf.transpose(predictions, PERMUTATION), tf.scalar(EPSILON)));
 				let sequenceLength = mulScalar(ones(predictions.shape[0]), predictions.shape[1]);
 				sequenceLength = tf.cast(sequenceLength, "int32");
 				
 				if (this.debug) {
-					console.log("Predictions: ")
+					console.log("Predictions: ");
 					predictions.print();
-					console.log("Processed predictions:")
-					input.print();
 				}
 				
-				let decoder = new CTCGreedyDecoder(true,
-				                                   this.debug);
+				let decoder = new CTCGreedyDecoder(true, this.debug);
 				decoder.decode(input, sequenceLength);
-				const indice = decoder.indices[0];
-				const value = decoder.values[0];
-				const shape = decoder.shape[0];
+				
+				const indice = decoder.getIndices()[0];
+				const value = decoder.getValues()[0];
+				const shape = decoder.getShape()[0];
 				
 				for (const v of value.dataSync())
 					if (v > 0)
 						result += this.parser.letters[v];
 					else
-						console.log(v)
+						console.log(v);
+				
+				if (this.debug) {
+					console.log("Indices:     ", indice.dataSync().join(', '));
+					console.log("Values:      ", value.dataSync().join(', '));
+					console.log("Shape:       ", shape.dataSync().join(', '));
+					console.log("Probability: ", 100 * decoder.logProbability.dataSync()[0]);
+				}
 				
 				indice.dispose();
 				value.dispose();
 				shape.dispose();
-				
 				return result;
 			}).catch(r => console.error(r));
 		} catch (e) {
 			console.error(e);
 		}
 		return result;
-		// const sample = [3, 18, 29, 7, 30, 19]
 	}
 }
 
@@ -148,30 +151,54 @@ class PredictorType8 extends PredictorBase {
 		
 		let denseNet = densenet(inputShape).apply(inputs);
 		
-		let squeezed = new Lambda((x) => tf.squeeze(x, 1))
-			.apply(denseNet);
+		let squeezed = new Lambda(
+			(x) => tf.squeeze(x, 1),
+			{name: 'lambda', dtype: 'float32', trainable: true}
+		).apply(denseNet);
 		
-		let reshaped = tf.layers.reshape({name: 'reshape', targetShape: [24, 128]})
+		let reshaped = tf.layers.reshape({name: 'reshape', targetShape: [24, 128], dtype: 'float32'})
 			.apply(squeezed);
 		
 		let blstm_1 = tf.layers.bidirectional({
 			                                      name:      'bidirectional',
-			                                      layer:     tf.layers.gru(DEFAULT_GRU_ARGS_T8),
-			                                      mergeMode: "concat"
+			                                      layer:     tf.layers.gru({
+				                                                               name:                'gru',
+				                                                               units:               256,
+				                                                               dtype:               'float32',
+				                                                               returnSequences:     true,
+				                                                               activation:          'tanh',
+				                                                               recurrentActivation: 'sigmoid',
+				                                                               dropout:             0.2,
+				                                                               resetAfter:          false
+			                                                               }),
+			                                      dtype:     'float32',
+			                                      mergeMode: 'concat'
 		                                      })
 			.apply(reshaped);
 		
 		let blstm_2 = tf.layers.bidirectional({
 			                                      name:      'bidirectional_1',
-			                                      layer:     tf.layers.gru(DEFAULT_GRU_ARGS_T8),
-			                                      mergeMode: "concat"
+			                                      layer:     tf.layers.gru({
+				                                                               name:                'gru_1',
+				                                                               units:               256,
+				                                                               dtype:               'float32',
+				                                                               returnSequences:     true,
+				                                                               activation:          'tanh',
+				                                                               recurrentActivation: 'sigmoid',
+				                                                               dropout:             0.2,
+				                                                               implementation:      2,
+				                                                               resetAfter:          false
+			                                                               }),
+			                                      dtype:     'float32',
+			                                      mergeMode: 'concat'
 		                                      })
 			.apply(blstm_1);
 		
 		let outputs = tf.layers.dense({
-			                              name:       "dense",
+			                              name:       'dense',
+			                              dtype:      'float32',
 			                              units:      this.parser.letters.length + 1,
-			                              activation: "softmax"
+			                              activation: 'softmax'
 		                              })
 			.apply(blstm_2);
 		
