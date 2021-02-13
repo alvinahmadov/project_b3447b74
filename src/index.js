@@ -1,3 +1,7 @@
+/**
+ * Alvin Ahmadov [https://github.com/AlvinAhmadov]
+ * */
+
 import {Predictor} from "./predictor.js";
 import {pathJoin}  from "./utils.js";
 import {
@@ -6,16 +10,14 @@ import {
 	PTYPE
 }                  from "./constants.js";
 
-async function recognize(type, configPath, imagePath, shardsPrefix) {
-	let pred = new Predictor(configPath, false);
-	return await pred.run(type, imagePath, shardsPrefix);
-}
-
 const TYPE = PTYPE.T8;
 const CONFIG = 'params.yaml';
 const IMG_PATH = pathJoin(DATA_ROOT, "example8.png");
 const SHARDS_PREF = pathJoin(DATA_ROOT, MODEL_ROOT, TYPE);
 
-recognize(TYPE, CONFIG, IMG_PATH, SHARDS_PREF)
-	.then(t => console.log("Text:", t))
-	.catch(reason => console.error(reason));
+(async () => {
+	let pred = new Predictor(CONFIG, false);
+	let text = await pred.run(TYPE, IMG_PATH, SHARDS_PREF);
+	console.log("Decoded text:", text);
+	return text;
+})()
