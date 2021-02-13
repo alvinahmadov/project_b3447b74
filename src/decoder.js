@@ -1,3 +1,10 @@
+/**
+ * Alvin Ahmadov [https://github.com/AlvinAhmadov]
+ *
+ * @see Alex Graves - Connectionist Temporal Classification: Labelling Unsegmented
+                      Sequence Data with Recurrent Neural Networks [https://www.cs.toronto.edu/~graves/icml_2006.pdf]
+ * */
+
 import * as tf  from "@tensorflow/tfjs-node";
 import {rowMax} from "./utils.js";
 
@@ -18,9 +25,8 @@ class CTCDecoder {
 	 * */
 	constructor(mergeRepeated = true, debug) {
 		this.mergeRepeated_ = mergeRepeated;
-		this.indices_ = []
-		this.values_ = []
-		this.shape_ = []
+		this.results = new Map()
+		this.logProb = null
 		this.debug = debug;
 	}
 	
@@ -33,16 +39,42 @@ class CTCDecoder {
 	 */
 	decode(input, inputLength) {}
 	
-	get indices() {
-		return this.indices_;
+	get logProbability() {
+		return this.logProb;
 	}
 	
-	get values() {
-		return this.values_;
+	getIndices() {
+		return this._getSetHelper('indices');
 	}
 	
-	get shape() {
-		return this.shape_;
+	setIndices(indice) {
+		this._getSetHelper('indices', indice);
+	}
+	
+	getValues() {
+		return this._getSetHelper('values');
+	}
+	
+	setValues(value) {
+		this._getSetHelper('values', value);
+	}
+	
+	getShape() {
+		return this._getSetHelper('shape');
+	}
+	
+	setShape(shape) {
+		this._getSetHelper('shape', shape);
+	}
+	
+	_getSetHelper(key, t = null) {
+		if (t === null || t === undefined)
+			return this.results.get(key);
+		
+		if (!this.results.has(key))
+			this.results.set(key, [t]);
+		else
+			this.results.get(key).push(t);
 	}
 }
 
@@ -91,11 +123,9 @@ export class CTCGreedyDecoder extends CTCDecoder {
 		
 		// Group pretrained data into equal-sized slices as tensor2d [batchSize, numClasses],
 		// group count is `maxTime` and each group has `numClasses` elements
-		for (let timeStep = 0, step = 0;
-		     timeStep < maxTime;
+		for (let timeStep = 0, step = 0; timeStep < maxTime;
 		     ++timeStep, step = timeStep * batchSize * numClasses) {
-			let sliced = inputsData.slice(step,
-			                              (timeStep + 1) * batchSize * numClasses)
+			let sliced = inputsData.slice(step, (timeStep + 1) * batchSize * numClasses)
 			if (sliced.length > 0)
 				inputListTimesteps.push(tf.tensor2d(sliced, [batchSize, numClasses]));
 		}
@@ -105,12 +135,13 @@ export class CTCGreedyDecoder extends CTCDecoder {
 		
 		let decoder = (begin, end) => {
 			for (let idx = begin; idx < end; ++idx) {
-				let sequence = []
+				sequences[idx] = new Array();
+				let sequence = [];
 				let prevIndices = -1;
 				for (let t = 0; t < seqLenT[idx]; ++t) {
 					let maxClassIndices;
 					const rmax = rowMax(inputListTimesteps[t], idx);
-					let prob = logProb.get(idx, 0)
+					let prob = logProb.get(idx, 0);
 					logProb.set(prob + (-rmax[0]), idx, 0);
 					maxClassIndices = rmax[1];
 					if (maxClassIndices !== blankIndex &&
@@ -119,48 +150,46 @@ export class CTCGreedyDecoder extends CTCDecoder {
 					}
 					prevIndices = maxClassIndices;
 				}
-				sequences[idx][0] = sequence;
+				sequences[idx].push(sequence);
 			}
 		}
 		
-		if (this.debug) {
-			console.log("Sequences: ", sequences)
-			console.log("Log prob : ", logProb.values)
-		}
-		
-		decoder(0, batchSize);
+		decoder(0, batchSize - 1);
 		this._save(sequences);
 		
-		inputs.dispose()
-		sequenceLength.dispose()
+		if (this.debug) {
+			console.log("Sequences: ", sequences);
+			console.log("Log prob : ", logProb.get(0, 0) * 0.01);
+		}
+		this.logProb = logProb.toTensor();
+		inputs.dispose();
+		sequenceLength.dispose();
 	}
 	
 	//private
 	_save(sequences) {
 		const batchSize = sequences.length;
 		const topPaths = CTCGreedyDecoder.topPaths;
-		let numEntries = Array(topPaths).fill(0)
+		let numEntries = Array(topPaths).fill(0);
 		
 		for (let sequence of sequences) {
-			if (this.debug)
-			
 			if (sequence.length !== topPaths)
-				throw Error("sequence !== topPaths");
+				throw Error(`sequence.length !== topPaths (${sequence.length}, ${topPaths})`);
 			
 			for (let path = 0; path < topPaths; ++path) {
 				numEntries[path] += sequence[path].length;
 				if (this.debug){
-					console.log("Path:      ", path)
-					console.log("NumEntrs:  ", numEntries[path])
+					console.log("Path:      ", path);
+					console.log("NumEntrs:  ", numEntries[path]);
 				}
 			}
 		}
 		
 		for (let path = 0; path < topPaths; ++path) {
 			const pNum = numEntries[path];
-			let indices = tf.buffer([pNum, 2], "float32")
-			let values = tf.buffer([pNum], "int32")
-			let shape = tf.buffer([2], "float32")
+			let indices = tf.buffer([pNum, 2], "int32");
+			let values = tf.buffer([pNum], "int32");
+			let shape = tf.buffer([2], "float32");
 			
 			let maxDecoded = 0;
 			let offset = 0;
@@ -172,10 +201,10 @@ export class CTCGreedyDecoder extends CTCDecoder {
 				
 				if (numDecoded > 0) {
 					if (offset > values.size)
-						throw Error("Offset should be smaller than values_t.size()");
+						throw Error("Offset should be smaller than values.size()");
 					
 					for (let k = 0; k < numDecoded; ++k) {
-						values.set(batch[k], offset + k)
+						values.set(batch[k], offset + k);
 					}
 				}
 				for (let t = 0; t < numDecoded; ++t, ++offset) {
@@ -187,12 +216,12 @@ export class CTCGreedyDecoder extends CTCDecoder {
 			shape.set(maxDecoded, 1);
 			
 			if (this.debug) {
-				console.log("BatchSize: ", batchSize)
+				console.log("BatchSize: ", batchSize);
 			}
 			
-			this.indices_.push(indices.toTensor())
-			this.values_.push(values.toTensor());
-			this.shape_.push(shape.toTensor())
+			this.setIndices(indices.toTensor());
+			this.setValues(values.toTensor());
+			this.setShape(shape.toTensor());
 		}
 	}
 }
