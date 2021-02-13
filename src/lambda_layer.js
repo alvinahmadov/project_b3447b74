@@ -1,12 +1,15 @@
+/**
+ * Alvin Ahmadov [https://github.com/AlvinAhmadov]
+ * */
 import * as tf from "@tensorflow/tfjs-node";
 
 export class Lambda extends tf.layers.Layer {
 	static className = 'Lambda'
 	
-	constructor(func,
-	            kwargs = {name: 'lambda', dtype: 'int32'}) {
+	constructor(func, kwargs) {
 		super(kwargs);
-		this.func_ = func;
+		this.function = func;
+		this.functionType = 'lambda';
 	}
 	
 	/**
@@ -18,7 +21,7 @@ export class Lambda extends tf.layers.Layer {
 	 * @param {Array} inputShape
 	 */
 	computeOutputShape(inputShape) {
-		return [inputShape[0], inputShape[2], inputShape[3]]
+		return [inputShape[0], inputShape[2], inputShape[3]];
 	}
 	
 	
@@ -37,7 +40,7 @@ export class Lambda extends tf.layers.Layer {
 			input = input[0];
 		
 		this.invokeCallHook(input, kwargs);
-		return this.func_(input, kwargs);
+		return this.function(input, kwargs);
 	}
 }
 
