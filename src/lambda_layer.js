@@ -6,7 +6,9 @@ import * as tf from "@tensorflow/tfjs-node";
 export class Lambda extends tf.layers.Layer {
 	static className = 'Lambda'
 	
-	constructor(func, kwargs) {
+	constructor(func, kwargs = {}) {
+		if (kwargs.name === undefined)
+			kwargs.name = 'lambda';
 		super(kwargs);
 		this.function = func;
 		this.functionType = 'lambda';
