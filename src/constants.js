@@ -2,7 +2,7 @@
  * Alvin Ahmadov [https://github.com/AlvinAhmadov]
  * */
 
-export const AXIS = 3;
+export const DATA_FORMAT = 'channelsLast'
 export const PERMUTATION = [1, 0, 2];
 export const BLOCKS = [6, 12, 24, 16];
 export const EPSILON = 1e-7;
