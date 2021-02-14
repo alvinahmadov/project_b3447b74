@@ -255,7 +255,7 @@ export async function processImage(imgPath,
                                    write = true) {
 	const width = params['width'];
 	const height = params['height'];
-	const net_chanels = params['net_channels'];
+	const netChannels = params['net_channels'];
 	const ratio = Math.floor(width / height);
 	const color = params['fill_color'];
 	try {
@@ -273,18 +273,15 @@ export async function processImage(imgPath,
 			} else if (w / h > ratio) {
 				dst = _processVImg(src, Math.floor((w - ratio * h) / (ratio * 2)), w, ratio, color);
 			}
-		}
+		} else dst = src;
 		cv.resize(dst, dst, new cv.Size(width, height), cv.INTER_LINEAR);
-		if (net_chanels === 1) {
+		if (netChannels === 1)
 			cv.cvtColor(dst, dst, cv.COLOR_BGR2GRAY);
-		}
 		
-		let imgTensor = tf.tensor3d(dst.data, [dst.rows, dst.cols, net_chanels], "float32");
-		imgTensor = tf.div(imgTensor, tf.scalar(255.0));
+		let imgTensor = tf.tensor3d(dst.data, [dst.rows, dst.cols, netChannels], "float32");
+		imgTensor = tf.div(imgTensor, tf.scalar(255));
+		imgTensor = tf.expandDims(imgTensor, 0);
 		
-		src.delete();
-		dst.delete();
-		imgTensor = tf.expandDims(imgTensor, 0)
 		return imgTensor;
 	} catch (e) {
 		console.error(cvTranslateError(e));
