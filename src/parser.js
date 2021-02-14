@@ -8,9 +8,9 @@ import {
 } from "./utils.js";
 
 export class ConfigParser {
-	constructor(path = 'params.yaml', typename) {
-		this.params = readParams(path);
-		this.typename = typename
+	constructor(path = 'params.yaml', type = 'type8') {
+		this._params = readParams(path);
+		this._type = type
 	}
 	
 	/**
@@ -21,85 +21,73 @@ export class ConfigParser {
 		return {
 			'width':        this.width,
 			'height':       this.height,
-			'net_channels': this.netChanels,
+			'net_channels': this.netChannels,
 			'fill_color':   this.fillColor,
 			'letters':      this.letters
 		};
+	}
+	
+	get type() {
+		if (!this._type)
+			throw Error("Parser not initialized with valid parameters!");
+		return this._type;
 	}
 	
 	/**
 	 * @returns {number}
 	 * */
 	get width() {
-		if (!this.typename)
-			return null
-		return this.params[this.typename]['width'];
+		return this._params[this.type]['width'];
 	}
 	
 	/**
 	 * @returns {number}
 	 * */
 	get height() {
-		if (!this.typename)
-			return null
-		return this.params[this.typename]['height'];
+		return this._params[this.type]['height'];
 	}
 	
 	/**
 	 * @returns {number}
 	 * */
-	get netChanels() {
-		if (!this.typename)
-			return null
-		return this.params[this.typename]['net_chanels'];
+	get netChannels() {
+		return this._params[this.type]['net_chanels'];
 	}
 	
 	/**
 	 * @returns {number}
 	 * */
 	get fillColor() {
-		if (!this.typename)
-			return null
-		return this.params[this.typename]['fill_color'];
+		return this._params[this.type]['fill_color'];
 	}
 	
 	/**
 	 * @returns {string}
 	 * */
 	get letters() {
-		if (!this.typename)
-			return null
-		return this.params[this.typename]['letters'];
+		return this._params[this.type]['letters'].replace('$$', '$');
 	}
 	
 	/**
 	 * @returns {number}
 	 * */
 	get ctcInputLength() {
-		if (!this.typename)
-			return null
-		return this.params[this.typename]['ctc_input_length'];
+		return this._params[this.type]['ctc_input_length'];
 	}
 	
 	get maxLabelLength() {
-		if (!this.typename)
-			return null
-		return this.params[this.typename]['max_label_length'];
+		return this._params[this.type]['max_label_length'];
 	}
 	
 	/**
 	 * @returns {string} path
 	 * */
 	get modelPath() {
-		if (!this.typename)
-			return null
-		return this.params[this.typename]['model_path'];
+		return this._params[this.type]['model_path'];
 	}
 	
 	get modelJSON() {
-		if (!this.typename)
-			return null
-		if (!this.modelPath.includes('.json'))
+		if (!this.modelPath.toLowerCase().includes('.json'))
 			throw Error("Not a json file: ", this.modelPath);
 		
 		return loadModelFromJSON(this.modelPath)
