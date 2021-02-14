@@ -107,7 +107,7 @@ export class CTCGreedyDecoder extends CTCDecoder {
 	 * @param {Tensor} sequenceLength: 1-D `int32` vector containing sequence lengths, having
 	 * size `[batch_size]`.
 	 * */
-	decode(inputs, sequenceLength) {
+	async decode(inputs, sequenceLength) {
 		const inputsShape = inputs.shape;
 		const maxTime = inputsShape[0];
 		const batchSize = inputsShape[1];
@@ -159,7 +159,7 @@ export class CTCGreedyDecoder extends CTCDecoder {
 		
 		if (this.debug) {
 			console.log("Sequences: ", sequences);
-			console.log("Log prob : ", logProb.get(0, 0) * 0.01);
+			console.log("Log prob : ", logProb.get(0, 0));
 		}
 		this.logProb = logProb.toTensor();
 		inputs.dispose();
