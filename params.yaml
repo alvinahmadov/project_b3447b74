@@ -8,7 +8,7 @@ models:
       letters: '$$.0123456789abcdefghijklmnopqrstuvwxy'
       ctc_input_length: 61
       max_label_length: 7
-      model_path: 'data/models/type4/model.json'
+      model_path: 'data/models/type1/model.json'
 
    type3:
       width: 200
@@ -18,7 +18,7 @@ models:
       letters: " #$$'+,-0123456789abcdefghijklmnopqrstuvwxyz"
       ctc_input_length: 48
       max_label_length: 8
-      model_path: 'data/models/type4/model.json'
+      model_path: 'data/models/type3/model.json'
 
    type4:
       width: 190
