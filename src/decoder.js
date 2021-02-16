@@ -125,7 +125,7 @@ export class CTCGreedyDecoder extends CTCDecoder {
 		// group count is `maxTime` and each group has `numClasses` elements
 		for (let timeStep = 0, step = 0; timeStep < maxTime;
 		     ++timeStep, step = timeStep * batchSize * numClasses) {
-			let sliced = inputsData.slice(step, (timeStep + 1) * batchSize * numClasses)
+			let sliced = inputsData.slice(step, (timeStep + 1) * batchSize * numClasses);
 			if (sliced.length > 0)
 				inputListTimesteps.push(tf.tensor2d(sliced, [batchSize, numClasses]));
 		}
@@ -154,7 +154,7 @@ export class CTCGreedyDecoder extends CTCDecoder {
 			}
 		}
 		
-		decoder(0, batchSize - 1);
+		decoder(0, batchSize > 1 ? batchSize - 1 : batchSize);
 		this._save(sequences);
 		
 		if (this.debug) {
