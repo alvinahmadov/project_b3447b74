@@ -69,3 +69,27 @@ models:
       ctc_input_length: 24
       max_label_length: 9
       model_path: 'data/models/type8/model.json'
+
+   recaptcha:
+      width: 95
+      height: 95
+      net_chanels: 3
+      fill_color: 255
+      classes:
+         - Bicycle
+         - Bridge
+         - Bus
+         - Car
+         - Chimney
+         - Crosswalk
+         - Hydrant
+         - Motorcycle
+         - Mountain
+         - Palm
+         - Stairs
+         - Taxi
+         - Tractor
+         - Traffic Light
+         - Boat
+         - Parking Meters
+      model_path: 'data/models/recaptcha/model.json'
