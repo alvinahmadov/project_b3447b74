@@ -10,14 +10,55 @@ import {
 	PTYPE
 }                  from "./constants.js";
 
-const TYPE = PTYPE.T8;
 const CONFIG = 'params.yaml';
-const IMG_PATH = pathJoin(DATA_ROOT, "example8.png");
-const SHARDS_PREF = pathJoin(DATA_ROOT, MODEL_ROOT, TYPE);
+const PARAMS = [
+	{
+		type:         PTYPE.T1,
+		imagePath:    pathJoin(DATA_ROOT, 'example1.png'),
+		shardsPrefix: pathJoin(DATA_ROOT, MODEL_ROOT, PTYPE.T1)
+	},
+	{
+		type:         PTYPE.T3,
+		imagePath:    pathJoin(DATA_ROOT, 'example3.png'),
+		shardsPrefix: pathJoin(DATA_ROOT, MODEL_ROOT, PTYPE.T3)
+	},
+	{
+		type:         PTYPE.T4,
+		imagePath:    pathJoin(DATA_ROOT, 'example4.png'),
+		shardsPrefix: pathJoin(DATA_ROOT, MODEL_ROOT, PTYPE.T4)
+	},
+	{
+		type:         PTYPE.T5,
+		imagePath:    pathJoin(DATA_ROOT, 'example5.png'),
+		shardsPrefix: pathJoin(DATA_ROOT, MODEL_ROOT, PTYPE.T5)
+	},
+	{
+		type:         PTYPE.T6,
+		imagePath:    pathJoin(DATA_ROOT, 'example6.png'),
+		shardsPrefix: pathJoin(DATA_ROOT, MODEL_ROOT, PTYPE.T6)
+	},
+	{
+		type:         PTYPE.T7,
+		imagePath:    pathJoin(DATA_ROOT, 'example7.jpg'),
+		shardsPrefix: pathJoin(DATA_ROOT, MODEL_ROOT, PTYPE.T7)
+	},
+	{
+		type:         PTYPE.T8,
+		imagePath:    pathJoin(DATA_ROOT, 'example8.png'),
+		shardsPrefix: pathJoin(DATA_ROOT, MODEL_ROOT, PTYPE.T8)
+	}
+];
+
+async function run(type, imagePath, shardsPrefix) {
+	let pred = new Predictor(CONFIG, false);
+	let text = await pred.run(type, imagePath, shardsPrefix)
+	console.log("Decoded text:", text);
+	return text
+}
 
 (async () => {
-	let pred = new Predictor(CONFIG, false);
-	let text = await pred.run(TYPE, IMG_PATH, SHARDS_PREF);
-	console.log("Decoded text:", text);
-	return text;
+	for (const param of PARAMS) {
+		console.log(`RUNNING ${param.type}`);
+		await run(param.type, param.imagePath, param.shardsPrefix);
+	}
 })()
