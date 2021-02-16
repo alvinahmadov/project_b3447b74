@@ -28,7 +28,6 @@ class PredictorBase {
 	constructor(path, type, debug) {
 		this.parser = new ConfigParser(path, type);
 		this.debug = debug;
-		this.modelName = 'model';
 	}
 	
 	/**
@@ -45,64 +44,76 @@ class PredictorBase {
 	}
 	
 	createModel(inputs, output, args) {
-		const units = (args.units !== undefined) ? args.units : 256;
-		const dropout = (args.dropout !== undefined) ? args.dropout : 0.2;
-		const activation = (args.activation !== undefined) ? args.activation : 'tanh';
-		const recurrentActivation = (args.recurrentActivation !== undefined) ? args.recurrentActivation : 'sigmoid';
-		const kernelInitializer = (args.kernelInitializer !== undefined) ? args.kernelInitializer : 'glorotUniform';
-		
-		let blstm_1 = tf.layers.bidirectional(
-			{
-				layer:     tf.layers.gru(
-					{
-						name:                'gru',
-						units:               units,
-						dtype:               'float32',
-						returnSequences:     true,
-						kernelInitializer:   kernelInitializer,
-						activation:          activation,
-						recurrentActivation: recurrentActivation,
-						dropout:             dropout,
-						implementation:      2,
-						resetAfter:          false
-					}
-				),
-				dtype:     'float32',
-				mergeMode: 'concat'
-			}).apply(output);
-		
-		let blstm_2 = tf.layers.bidirectional(
-			{
-				layer:     tf.layers.gru(
-					{
-						name:                'gru_1',
-						units:               units,
-						dtype:               'float32',
-						returnSequences:     true,
-						kernelInitializer:   kernelInitializer,
-						activation:          activation,
-						recurrentActivation: recurrentActivation,
-						dropout:             dropout,
-						implementation:      2,
-						resetAfter:          false
-					}),
-				dtype:     'float32',
-				mergeMode: 'concat'
-			}).apply(blstm_1);
-		
-		let denseLayer = tf.layers.dense({
-			                                 dtype:      'float32',
-			                                 units:      this.parser.letters.length + 1,
-			                                 activation: 'softmax'
-		                                 }).apply(blstm_2);
-		
-		const model = tf.model({name: this.modelName, inputs: inputs, outputs: denseLayer});
-		
-		if (this.debug) {
-			model.summary();
-			saveModelAsJSON(pathJoin(DATA_ROOT, MODEL_ROOT, `debug_model_${this.parser.type}.json`), model);
+		try {
+			const units = (args.units !== undefined) ? args.units : 256;
+			const dropout = (args.dropout !== undefined) ? args.dropout : 0.2;
+			const activation = (args.activation !== undefined) ? args.activation : 'tanh';
+			const recurrentActivation = (args.recurrentActivation !== undefined) ? args.recurrentActivation : 'sigmoid';
+			const kernelInitializer = (args.kernelInitializer !== undefined) ? args.kernelInitializer : 'glorotUniform';
+			const gruName1 = (args.name1 !== undefined) ? args.name1 : 'gru';
+			const gruName2 = (args.name2 !== undefined) ? args.name2 : 'gru_1';
+			
+			const gru1 = tf.layers.gru({
+				                           name:                gruName1,
+				                           units:               units,
+				                           dtype:               'float32',
+				                           returnSequences:     true,
+				                           kernelInitializer:   kernelInitializer,
+				                           activation:          activation,
+				                           recurrentActivation: recurrentActivation,
+				                           dropout:             dropout,
+				                           implementation:      2,
+				                           resetAfter:          false
+			                           })
+			
+			const gru2 = tf.layers.gru({
+				                           name:                gruName2,
+				                           units:               units,
+				                           dtype:               'float32',
+				                           returnSequences:     true,
+				                           kernelInitializer:   kernelInitializer,
+				                           activation:          activation,
+				                           recurrentActivation: recurrentActivation,
+				                           dropout:             dropout,
+				                           implementation:      2,
+				                           resetAfter:          false
+			                           })
+			
+			let blstm_1 = tf.layers.bidirectional(
+				{
+					name:      'bidirectional_1',
+					layer:     gru1,
+					dtype:     'float32',
+					mergeMode: 'concat'
+				}).apply(output);
+			
+			let blstm_2 = tf.layers.bidirectional(
+				{
+					name:      'bidirectional_2',
+					layer:     gru2,
+					dtype:     'float32',
+					mergeMode: 'concat'
+				}).apply(blstm_1);
+			
+			let denseLayer = tf.layers.dense({
+				                                 name:       'dense',
+				                                 dtype:      'float32',
+				                                 units:      this.parser.letters.length + 1,
+				                                 activation: 'softmax'
+			                                 }).apply(blstm_2);
+			
+			const model = tf.model({inputs: inputs, outputs: denseLayer});
+			
+			if (this.debug) {
+				model.summary();
+				saveModelAsJSON(pathJoin(DATA_ROOT, MODEL_ROOT, `debug_model_${this.parser.type}.json`), model);
+			}
+			
+			return model;
+		} catch (e) {
+			console.error(e)
+			throw Error(e)
 		}
-		return model;
 	}
 	
 	/**
@@ -123,6 +134,7 @@ class PredictorBase {
 			return readWeightMaps(this.parser.modelJSON[WEIGHTS_KEY], shardsPrefix).then((weightsMap) => {
 				model.loadWeights(weightsMap);
 				const predictions = model.predict(image);
+				
 				if (this.debug) {
 					console.log("Predictions: ");
 					predictions.print();
@@ -168,17 +180,15 @@ class PredictorBase {
 class PredictorType1 extends PredictorBase {
 	constructor(path, debug = false) {
 		super(path, PTYPE.T1, debug);
-		this.modelName = 'model1';
 	}
 	
 	get model() {
 		console.log(this.shape)
-		let inputs = tf.layers.input({shape: this.shape});
+		let inputs = tf.layers.input({name: 'input1', shape: this.shape});
 		
 		let conv_1 = tf.layers.conv2d({
 			                              filters:    32,
 			                              kernelSize: [3, 3],
-			                              strides:    [1, 1],
 			                              activation: 'relu',
 			                              padding:    'same'
 		                              }).apply(inputs);
@@ -191,14 +201,13 @@ class PredictorType1 extends PredictorBase {
 		let conv_2 = tf.layers.conv2d({
 			                              filters:    32,
 			                              kernelSize: [3, 3],
-			                              strides:    [1, 1],
 			                              activation: 'relu',
 			                              padding:    'same',
 		                              }).apply(pool_1);
 		
 		let pool_2 = tf.layers.maxPool2d({
 			                                 poolSize: [4, 2],
-			                                 strides:  [2, 2],
+			                                 strides:  2,
 			                                 padding:  'valid'
 		                                 }).apply(conv_2);
 		
@@ -250,8 +259,10 @@ class PredictorType1 extends PredictorBase {
 		
 		let squeezed = new Lambda(x => tf.squeeze(x, 1)).apply(conv_7);
 		
-		return this.createModel(inputs, squeezed, 'model1',
+		return this.createModel(inputs, squeezed,
 		                        {
+			                        name1:               'gru_1a',
+			                        name2:               'gru_1b',
 			                        units:               128,
 			                        activation:          'tanh',
 			                        recurrentActivation: 'sigmoid',
@@ -263,17 +274,18 @@ class PredictorType1 extends PredictorBase {
 class PredictorType3 extends PredictorBase {
 	constructor(path, debug = false) {
 		super(path, PTYPE.T3, debug);
-		this.modelName = 'model3';
 	}
 	
 	get model() {
-		let inputs = tf.layers.input({shape: this.shape});
+		let inputs = tf.layers.input({name: 'input3', shape: this.shape});
 		
 		let denseNetLayer = densenet(this.shape).apply(inputs);
 		let reshaped = tf.layers.reshape({targetShape: [48, 128]}).apply(denseNetLayer);
 		
-		return this.createModel(inputs, reshaped, 'model3',
+		return this.createModel(inputs, reshaped,
 		                        {
+			                        name1:               'gru_3a',
+			                        name2:               'gru_3b',
 			                        units:               256,
 			                        dropout:             0.5,
 			                        activation:          'tanh',
@@ -285,18 +297,19 @@ class PredictorType3 extends PredictorBase {
 class PredictorType4 extends PredictorBase {
 	constructor(path, debug = false) {
 		super(path, PTYPE.T4, debug);
-		this.modelName = 'model4';
 	}
 	
 	get model() {
-		let inputs = tf.layers.input({shape: this.shape});
+		let inputs = tf.layers.input({name: 'input4',shape: this.shape});
 		
 		let denseNetLayer = densenet(this.shape).apply(inputs);
 		let squeezed = new Lambda(x => tf.squeeze(x, 1)).apply(denseNetLayer);
 		let reshaped = tf.layers.reshape({targetShape: [12, 512]}).apply(squeezed);
 		
-		return this.createModel(inputs, reshaped, 'model4',
+		return this.createModel(inputs, reshaped,
 		                        {
+			                        name1:               'gru_4a',
+			                        name2:               'gru_4b',
 			                        units:               256,
 			                        returnSequences:     true,
 			                        activation:          'tanh',
@@ -309,7 +322,6 @@ class PredictorType4 extends PredictorBase {
 class PredictorType5 extends PredictorBase {
 	constructor(path, debug = false) {
 		super(path, PTYPE.T5, debug);
-		this.modelName = 'model5';
 	}
 	
 	get model() {
@@ -318,6 +330,7 @@ class PredictorType5 extends PredictorBase {
 		let denseNet = densenet(this.shape).apply(inputs);
 		
 		let conv2 = tf.layers.conv2d({
+			                             name:       'conv2d_Conv2D1',
 			                             filters:    1024,
 			                             kernelSize: [2, 2],
 			                             activation: 'relu'
@@ -332,6 +345,8 @@ class PredictorType5 extends PredictorBase {
 		
 		return this.createModel(inputs, reshaped,
 		                        {
+			                        name1:               'gru_5a',
+			                        name2:               'gru_5b',
 			                        units:               256,
 			                        dropout:             0.5,
 			                        activation:          'tanh',
@@ -343,11 +358,10 @@ class PredictorType5 extends PredictorBase {
 class PredictorType6 extends PredictorBase {
 	constructor(path, debug = false) {
 		super(path, PTYPE.T6, debug);
-		this.modelName = 'model6';
 	}
 	
 	get model() {
-		let inputs = tf.input({shape: this.shape});
+		let inputs = tf.input({name: 'input6', shape: this.shape});
 		
 		let denseNet = densenet(this.shape).apply(inputs);
 		
@@ -361,6 +375,8 @@ class PredictorType6 extends PredictorBase {
 		
 		return this.createModel(inputs, reshaped,
 		                        {
+			                        name1:               'gru_6a',
+			                        name2:               'gru_6b',
 			                        units:               256,
 			                        dropout:             0.2,
 			                        activation:          'tanh',
@@ -372,11 +388,10 @@ class PredictorType6 extends PredictorBase {
 class PredictorType7 extends PredictorBase {
 	constructor(path, debug = false) {
 		super(path, PTYPE.T7, debug);
-		this.modelName = 'model7';
 	}
 	
 	get model() {
-		let inputs = tf.input({shape: this.shape});
+		let inputs = tf.input({name: 'input7', shape: this.shape});
 		
 		let denseNet = densenet(this.shape).apply(inputs);
 		
@@ -390,6 +405,8 @@ class PredictorType7 extends PredictorBase {
 		
 		return this.createModel(inputs, reshaped,
 		                        {
+			                        name1:               'gru_7a',
+			                        name2:               'gru_7b',
 			                        units:               256,
 			                        dropout:             0.2,
 			                        activation:          'tanh',
@@ -407,7 +424,6 @@ class PredictorType8 extends PredictorBase {
 	 */
 	constructor(path, debug = false) {
 		super(path, PTYPE.T8, debug);
-		this.modelName = 'model8';
 	}
 	
 	/**
@@ -428,6 +444,8 @@ class PredictorType8 extends PredictorBase {
 		
 		return this.createModel(inputs, reshaped,
 		                        {
+			                        name1:               'gru_8a',
+			                        name2:               'gru_8b',
 			                        units:               256,
 			                        dropout:             0.2,
 			                        activation:          'tanh',
@@ -440,24 +458,32 @@ class Predictor {
 	constructor(path, debug) {
 		this.path = path;
 		this.debug = debug;
+		this.predictor = null
 	}
 	
 	_prepare(type) {
 		switch (type) {
 			case PTYPE.T1:
-				return new PredictorType1(this.path, this.debug);
+				this.predictor = new PredictorType1(this.path, this.debug);
+				break;
 			case PTYPE.T3:
-				return new PredictorType3(this.path, this.debug);
+				this.predictor = new PredictorType3(this.path, this.debug);
+				break;
 			case PTYPE.T4:
-				return new PredictorType4(this.path, this.debug);
+				this.predictor = new PredictorType4(this.path, this.debug);
+				break;
 			case PTYPE.T5:
-				return new PredictorType5(this.path, this.debug);
+				this.predictor = new PredictorType5(this.path, this.debug);
+				break;
 			case PTYPE.T6:
-				return new PredictorType6(this.path, this.debug);
+				this.predictor = new PredictorType6(this.path, this.debug);
+				break;
 			case PTYPE.T7:
-				return new PredictorType7(this.path, this.debug);
+				this.predictor = new PredictorType7(this.path, this.debug);
+				break;
 			case PTYPE.T8:
-				return new PredictorType8(this.path, this.debug);
+				this.predictor = new PredictorType8(this.path, this.debug);
+				break;
 			default:
 				throw Error("Undefined type")
 		}
@@ -471,13 +497,11 @@ class Predictor {
 	 * @param {string} shardsPrefix Prefix to the location of shard files (*.bin)
 	 * @returns {Promise<string>} Recognized text
 	 * */
-	async run(type, imagePath, shardsPrefix) {
-		try {
-			let predictor = this._prepare(type);
-			return predictor.predict(imagePath, shardsPrefix);
-		} catch (e) {
-			console.error(e);
-		}
+	run(type, imagePath, shardsPrefix) {
+		this._prepare(type);
+		let res = this.predictor.predict(imagePath, shardsPrefix);
+		delete this.predictor;
+		return res;
 	}
 }
 
