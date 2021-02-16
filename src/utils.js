@@ -8,7 +8,6 @@ import canvas      from "canvas"
 import jsonfile    from "jsonfile";
 import {JSDOM}     from "jsdom";
 import {cv}        from "opencv-wasm";
-import {DATA_ROOT} from "./constants.js";
 
 const {loadImage, createCanvas, Canvas, Image, ImageData} = canvas;
 
@@ -256,8 +255,8 @@ export async function processImage(imgPath,
 	const width = params['width'];
 	const height = params['height'];
 	const netChannels = params['net_channels'];
-	const ratio = Math.floor(width / height);
 	const color = params['fill_color'];
+	const ratio = Math.floor(width / height);
 	try {
 		let src = await cvRead(imgPath);
 		let dst;
