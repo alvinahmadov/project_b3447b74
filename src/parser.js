@@ -2,10 +2,7 @@
  * Alvin Ahmadov [https://github.com/AlvinAhmadov]
  * */
 
-import {
-	readParams,
-	loadModelFromJSON,
-} from "./utils.js";
+import {readParams, loadModelFromJSON} from "./utils.js";
 
 export class ConfigParser {
 	constructor(path = 'params.yaml', type = 'type8') {
@@ -23,7 +20,7 @@ export class ConfigParser {
 			'height':       this.height,
 			'net_channels': this.netChannels,
 			'fill_color':   this.fillColor,
-			'letters':      this.letters
+			'classes':      this.classes
 		};
 	}
 	
@@ -64,8 +61,13 @@ export class ConfigParser {
 	/**
 	 * @returns {string}
 	 * */
-	get letters() {
-		return this._params[this.type]['letters'].replace('$$', '$');
+	get classes() {
+		let params = this._params[this.type];
+		
+		if ('classes' in params)
+			return params['classes'];
+		else
+			return params['letters'].replace('$$', '$')
 	}
 	
 	/**
