@@ -21,7 +21,7 @@ import {
 	DATA_ROOT,
 	MODEL_ROOT,
 	WEIGHTS_KEY,
-	PTYPE, DATA_FORMAT
+	PTYPE
 }                         from "./constants.js"
 
 class PredictorBase {
@@ -98,7 +98,7 @@ class PredictorBase {
 			let denseLayer = tf.layers.dense({
 				                                 name:       'dense',
 				                                 dtype:      'float32',
-				                                 units:      this.parser.letters.length + 1,
+				                                 units:      this.parser.classes.length + 1,
 				                                 activation: 'softmax'
 			                                 }).apply(blstm_2);
 			
@@ -140,12 +140,20 @@ class PredictorBase {
 					predictions.print();
 				}
 				
-				let input = tf.log(tf.add(tf.transpose(predictions, PERMUTATION), tf.scalar(EPSILON)));
-				let sequenceLength = mulScalar(ones(predictions.shape[0]), predictions.shape[1]);
-				sequenceLength = tf.cast(sequenceLength, "int32");
-				predictions.dispose()
+				let input = predictions;
+				if (input.shape.length < PERMUTATION.length) {
+					input = predictions.expandDims(0);
+				}
 				
-				let decoder = new CTCGreedyDecoder(true, this.debug);
+				const sequenceLength = tf.cast(
+					mulScalar(ones(input.shape[0]), input.shape[1]),
+					"int32"
+				);
+				
+				input = tf.log(tf.add(tf.transpose(input, PERMUTATION), tf.scalar(EPSILON)));
+				predictions.dispose();
+				
+				const decoder = new CTCGreedyDecoder(true, this.debug);
 				
 				return decoder.decode(input, sequenceLength).then(() => {
 					const indice = decoder.getIndices()[0];
@@ -154,13 +162,13 @@ class PredictorBase {
 					
 					for (const v of value.dataSync())
 						if (v >= 0)
-							result += this.parser.letters[v];
+							result += this.parser.classes[v];
 					
 					if (this.debug) {
 						console.log(`Indices     : [${indice.dataSync().join(', ')}]`);
 						console.log(`Values      : [${value.dataSync().join(', ')}]`);
 						console.log(`Shape       : [${shape.dataSync().join(', ')}]`);
-						console.log(`Probability : ${(100 * decoder.logProbability.dataSync()[0]).toFixed()}%`);
+						console.log(`Probability : ${decoder.logProbability.dataSync()}`);
 					}
 					
 					indice.dispose();
@@ -183,8 +191,7 @@ class PredictorType1 extends PredictorBase {
 	}
 	
 	get model() {
-		console.log(this.shape)
-		let inputs = tf.layers.input({name: 'input1', shape: this.shape});
+		let inputs = tf.layers.input({shape: this.shape});
 		
 		let conv_1 = tf.layers.conv2d({
 			                              filters:    32,
@@ -277,7 +284,7 @@ class PredictorType3 extends PredictorBase {
 	}
 	
 	get model() {
-		let inputs = tf.layers.input({name: 'input3', shape: this.shape});
+		let inputs = tf.layers.input({shape: this.shape});
 		
 		let denseNetLayer = densenet(this.shape).apply(inputs);
 		let reshaped = tf.layers.reshape({targetShape: [48, 128]}).apply(denseNetLayer);
@@ -300,7 +307,7 @@ class PredictorType4 extends PredictorBase {
 	}
 	
 	get model() {
-		let inputs = tf.layers.input({name: 'input4',shape: this.shape});
+		let inputs = tf.layers.input({shape: this.shape});
 		
 		let denseNetLayer = densenet(this.shape).apply(inputs);
 		let squeezed = new Lambda(x => tf.squeeze(x, 1)).apply(denseNetLayer);
@@ -325,7 +332,7 @@ class PredictorType5 extends PredictorBase {
 	}
 	
 	get model() {
-		let inputs = tf.input({name: "input5", shape: this.shape});
+		let inputs = tf.input({shape: this.shape});
 		
 		let denseNet = densenet(this.shape).apply(inputs);
 		
@@ -361,7 +368,7 @@ class PredictorType6 extends PredictorBase {
 	}
 	
 	get model() {
-		let inputs = tf.input({name: 'input6', shape: this.shape});
+		let inputs = tf.input({shape: this.shape});
 		
 		let denseNet = densenet(this.shape).apply(inputs);
 		
@@ -391,7 +398,7 @@ class PredictorType7 extends PredictorBase {
 	}
 	
 	get model() {
-		let inputs = tf.input({name: 'input7', shape: this.shape});
+		let inputs = tf.input({shape: this.shape});
 		
 		let denseNet = densenet(this.shape).apply(inputs);
 		
@@ -454,8 +461,59 @@ class PredictorType8 extends PredictorBase {
 	}
 }
 
+class PredictorRecap extends PredictorBase {
+	/**
+	 * Constructor of PredictorRecap.
+	 *
+	 * @param {string} path Path to the parameters file
+	 * @param {boolean} debug Show debugging messages.
+	 */
+	constructor(path, debug = false) {
+		super(path, PTYPE.RECAP, debug);
+	}
+	
+	/**
+	 * Get the pretrained model.
+	 */
+	get model() {
+		let inputs = tf.input({shape: this.shape})
+		let denseNet = densenet(null, inputs);
+		denseNet.trainable = false;
+		
+		let output = tf.layers.globalAveragePooling2d({name: 'avg_pool'}).apply(denseNet.output);
+		output = tf.layers.batchNormalization({name: 'batch_norm_1'}).apply(output);
+		output = tf.layers.dense({
+			                         name:       'dense_1',
+			                         units:      128,
+			                         activation: 'relu'
+		                         }).apply(output);
+		
+		output = tf.layers.dense({
+			                         name:       'dense_2',
+			                         units:      128,
+			                         activation: 'relu'
+		                         }).apply(output);
+		
+		output = tf.layers.dropout({rate: 0.2, name: 'top_dropout'}).apply(output);
+		
+		output = tf.layers.dense({
+			                         name: 'dense',
+			                         units: this.parser.classes.length,
+			                         activation: 'softmax'}).apply(output);
+		
+		const model = tf.model({inputs: inputs, outputs: output});
+		
+		if (this.debug) {
+			model.summary();
+			saveModelAsJSON(pathJoin(DATA_ROOT, MODEL_ROOT, `debug_model_${this.parser.type}.json`), model);
+		}
+		
+		return model;
+	}
+}
+
 class Predictor {
-	constructor(path, debug) {
+	constructor(path, debug = false) {
 		this.path = path;
 		this.debug = debug;
 		this.predictor = null
@@ -484,6 +542,9 @@ class Predictor {
 			case PTYPE.T8:
 				this.predictor = new PredictorType8(this.path, this.debug);
 				break;
+			case PTYPE.RECAP:
+				this.predictor = new PredictorRecap(this.path, this.debug);
+				break;
 			default:
 				throw Error("Undefined type")
 		}
@@ -497,9 +558,9 @@ class Predictor {
 	 * @param {string} shardsPrefix Prefix to the location of shard files (*.bin)
 	 * @returns {Promise<string>} Recognized text
 	 * */
-	run(type, imagePath, shardsPrefix) {
+	async run(type, imagePath, shardsPrefix) {
 		this._prepare(type);
-		let res = this.predictor.predict(imagePath, shardsPrefix);
+		let res = await this.predictor.predict(imagePath, shardsPrefix);
 		delete this.predictor;
 		return res;
 	}
