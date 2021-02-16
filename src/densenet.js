@@ -178,8 +178,11 @@ function densenetPrepare(inputs, debug = false) {
 	return outputs
 }
 
-export function densenet(shape, debug = false) {
-	const inputs = tf.input({name: "input2", shape: shape})
+export function densenet(shape, inputs = null, debug = false) {
+	
+	if (inputs === null)
+		inputs = tf.input({shape: shape});
+	
 	const outputs = densenetPrepare(inputs, debug)
 	
 	return new Densenet({name: 'densenet121', inputs: inputs, outputs: outputs});
