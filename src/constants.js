@@ -17,5 +17,6 @@ export const PTYPE = {
 	T5: "type5",
 	T6: "type6",
 	T7: "type7",
-	T8: "type8"
+	T8: "type8",
+	RECAP: "recaptcha"
 }
